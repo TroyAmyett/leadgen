@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Backgrounds */
+  --fl-color-bg-base: #0a0a0f;
+  --fl-color-bg-surface: rgba(255, 255, 255, 0.03);
+  --fl-color-bg-elevated: rgba(255, 255, 255, 0.05);
+
+  /* Borders */
+  --fl-color-border: rgba(255, 255, 255, 0.1);
+  --fl-color-border-strong: rgba(255, 255, 255, 0.2);
+
+  /* Text */
+  --fl-color-text-primary: rgba(255, 255, 255, 0.95);
+  --fl-color-text-secondary: rgba(255, 255, 255, 0.7);
+  --fl-color-text-muted: rgba(255, 255, 255, 0.5);
+
+  /* Brand */
+  --fl-color-primary: #0ea5e9;
+  --fl-color-primary-hover: #38bdf8;
+
+  /* Status */
+  --fl-color-success: #22c55e;
+  --fl-color-warning: #f59e0b;
+  --fl-color-error: #ef4444;
+
+  /* Transitions */
+  --fl-transition-fast: 150ms ease;
+  --fl-transition-normal: 200ms ease;
+
+  /* Z-index */
+  --fl-z-dropdown: 50;
+  --fl-z-modal: 100;
+  --fl-z-toast: 200;
+}
+
+body {
+  background: var(--fl-color-bg-base);
+  color: var(--fl-color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  min-height: 100vh;
+}
+
+/* Background gradient effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(14, 165, 233, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(14, 165, 233, 0.03) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+@layer components {
+  /* Glassmorphism card */
+  .glass-card {
+    @apply bg-fl-bg-elevated backdrop-blur-[20px] border border-fl-border rounded-2xl;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply px-4 py-2 bg-fl-primary text-white font-medium rounded-lg
+           hover:bg-fl-primary-hover transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Secondary button */
+  .btn-secondary {
+    @apply px-4 py-2 bg-fl-bg-elevated text-fl-text-primary font-medium rounded-lg
+           border border-fl-border hover:border-fl-border-strong
+           transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Destructive button */
+  .btn-destructive {
+    @apply px-4 py-2 bg-fl-error/20 text-fl-error font-medium rounded-lg
+           border border-fl-error/30 hover:bg-fl-error/30
+           transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Form input */
+  .input {
+    @apply w-full px-3 py-2 bg-fl-bg-surface border border-fl-border rounded-lg
+           text-fl-text-primary placeholder:text-fl-text-muted
+           focus:outline-none focus:border-fl-primary focus:ring-1 focus:ring-fl-primary
+           transition-colors duration-150;
+  }
+
+  /* Form label */
+  .label {
+    @apply block text-sm font-medium text-fl-text-secondary mb-1;
+  }
+
+  /* Status badges */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-new {
+    @apply bg-fl-primary/20 text-fl-primary border border-fl-primary/30;
+  }
+
+  .badge-enriched {
+    @apply bg-fl-success/20 text-fl-success border border-fl-success/30;
+  }
+
+  .badge-pending {
+    @apply bg-fl-warning/20 text-fl-warning border border-fl-warning/30;
+  }
+
+  .badge-error {
+    @apply bg-fl-error/20 text-fl-error border border-fl-error/30;
+  }
+
+  /* Stats card */
+  .stats-card {
+    @apply glass-card p-6;
+  }
+
+  .stats-card-label {
+    @apply text-sm text-fl-text-muted font-medium;
+  }
+
+  .stats-card-value {
+    @apply text-3xl font-semibold text-fl-text-primary mt-1;
+  }
+
+  /* Table styles */
+  .table-container {
+    @apply glass-card overflow-hidden;
+  }
+
+  .table {
+    @apply w-full;
+  }
+
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-medium text-fl-text-muted uppercase tracking-wider
+           bg-fl-bg-surface border-b border-fl-border;
+  }
+
+  .table td {
+    @apply px-4 py-3 text-sm text-fl-text-primary border-b border-fl-border;
+  }
+
+  .table tr:hover td {
+    @apply bg-fl-bg-surface;
+  }
+
+  .table tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--fl-color-bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--fl-color-border-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fl-color-text-muted);
+}
