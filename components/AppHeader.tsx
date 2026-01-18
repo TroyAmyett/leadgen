@@ -12,7 +12,35 @@ import {
   Settings,
   LogOut,
   User,
+  Radio,
 } from 'lucide-react'
+
+// Helper to get app URLs based on environment
+function getAppUrl(app: string): string {
+  const isDev = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+  const devPorts: Record<string, number> = {
+    agentpm: 3000,
+    radar: 3001,
+    notetaker: 3000,
+    canvas: 3003,
+    leadgen: 3004,
+  }
+
+  const prodDomains: Record<string, string> = {
+    agentpm: 'agentpm.funnelists.com',
+    radar: 'radar.funnelists.com',
+    notetaker: 'notetaker.funnelists.com',
+    canvas: 'canvas.funnelists.com',
+    leadgen: 'leadgen.funnelists.com',
+  }
+
+  if (isDev) {
+    return `http://localhost:${devPorts[app] || 3000}`
+  }
+
+  return `https://${prodDomains[app] || 'funnelists.com'}`
+}
 import { useAuthStore } from '@/stores/authStore'
 
 interface Tool {
@@ -30,20 +58,28 @@ const tools: Tool[] = [
     name: 'AgentPM',
     icon: <Bot size={18} />,
     description: 'AI project management',
-    href: 'https://agentpm.funnelists.com',
+    href: getAppUrl('agentpm'),
+  },
+  {
+    id: 'radar',
+    name: 'Radar',
+    icon: <Radio size={18} />,
+    description: 'Intelligence feed',
+    href: getAppUrl('radar'),
   },
   {
     id: 'notetaker',
     name: 'NoteTaker',
     icon: <StickyNote size={18} />,
     description: 'Brainstorming & ideation',
-    href: 'https://notetaker.funnelists.com',
+    href: getAppUrl('notetaker'),
   },
   {
     id: 'canvas',
     name: 'Canvas',
     icon: <Palette size={18} />,
     description: 'AI design & visuals',
+    href: getAppUrl('canvas'),
     comingSoon: true,
   },
   {
@@ -189,21 +225,8 @@ export function AppHeader() {
             </div>
           </div>
 
-          {/* Right: Navigation + User Menu */}
+          {/* Right: User Menu */}
           <div className="flex items-center gap-4">
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              <NavLink href="/" active={pathname === '/'}>
-                Dashboard
-              </NavLink>
-              <NavLink href="/leads" active={pathname.startsWith('/leads')}>
-                Leads
-              </NavLink>
-              <NavLink href="/import" active={pathname === '/import'}>
-                Import
-              </NavLink>
-            </nav>
-
             {/* User Menu */}
             {user && (
               <div className="relative" ref={userMenuRef}>
@@ -261,27 +284,3 @@ export function AppHeader() {
   )
 }
 
-function NavLink({
-  href,
-  active,
-  children,
-}: {
-  href: string
-  active: boolean
-  children: React.ReactNode
-}) {
-  const router = useRouter()
-
-  return (
-    <button
-      onClick={() => router.push(href)}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-        active
-          ? 'bg-fl-primary/10 text-fl-primary'
-          : 'text-fl-text-secondary hover:text-fl-text-primary hover:bg-fl-bg-elevated'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
