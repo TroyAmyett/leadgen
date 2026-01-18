@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { LayoutDashboard, Users, Upload, Database, Settings } from 'lucide-react'
+import { useAuthStore } from '@/stores/authStore'
 
 export type LeadGenTab = 'dashboard' | 'leads' | 'import' | 'enrichment' | 'settings'
 
