@@ -15,10 +15,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased">
+    <html lang="en" className="dark">
+      <body className="antialiased bg-fl-bg-base text-fl-text-primary min-h-screen">
         <AuthProvider>
-          <div className="min-h-screen flex flex-col">
+          <div className="min-h-screen flex flex-col bg-fl-bg-base">
             <AppHeader />
             <div className="flex-1 flex">
               <LeadGenSidebar />
