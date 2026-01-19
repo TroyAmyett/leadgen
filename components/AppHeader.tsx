@@ -98,11 +98,6 @@ export function AppHeader() {
   const [toolsOpen, setToolsOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
 
-  // Don't show header on auth page or when not logged in
-  if (pathname === '/auth' || (!loading && !user)) {
-    return null
-  }
-
   const toolsRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
 
@@ -136,8 +131,8 @@ export function AppHeader() {
     router.push('/auth')
   }
 
-  // Don't show header on auth page
-  if (pathname === '/auth') {
+  // Don't show header on auth page or when not logged in
+  if (pathname === '/auth' || (!loading && !user)) {
     return null
   }
 
