@@ -25,6 +25,12 @@ const settingsItem: SidebarItem = { id: 'settings', label: 'Settings', icon: Set
 export function LeadGenSidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { user, loading } = useAuthStore()
+
+  // Don't show sidebar on auth page or when not logged in
+  if (pathname === '/auth' || (!loading && !user)) {
+    return null
+  }
 
   const getActiveTab = (): LeadGenTab => {
     if (pathname === '/') return 'dashboard'

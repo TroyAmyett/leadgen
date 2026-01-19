@@ -93,10 +93,15 @@ const tools: Tool[] = [
 export function AppHeader() {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, signOut } = useAuthStore()
+  const { user, loading, signOut } = useAuthStore()
 
   const [toolsOpen, setToolsOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+
+  // Don't show header on auth page or when not logged in
+  if (pathname === '/auth' || (!loading && !user)) {
+    return null
+  }
 
   const toolsRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
