@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  MoreVertical,
   Sparkles,
   Edit,
   Trash2,
@@ -11,10 +10,16 @@ import {
   Mail,
   Phone,
   Building,
+  MapPin,
+  Facebook,
+  Linkedin,
+  Instagram,
+  Twitter,
+  Youtube,
+  Globe,
 } from 'lucide-react'
 import { useLeadsStore, LocalLead } from '@/stores/leadsStore'
-// LeadFormModal requires full DB Lead type, not available for local leads yet
-// import { LeadFormModal } from '@/components/LeadFormModal'
+import { LeadFormModal } from '@/components/LeadFormModal'
 
 // Use LocalLead type which is simpler and works for both local and DB leads
 interface LeadsTableProps {
@@ -33,22 +38,17 @@ export function LeadsTable({
   allSelected,
 }: LeadsTableProps) {
   const { toggleLeadSelection } = useLeadsStore()
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingLead, setEditingLead] = useState<LocalLead | null>(null)
 
   const handleDelete = (lead: LocalLead) => {
-    // For local leads, deletion is handled by the parent component
     if (window.confirm('Are you sure you want to delete this lead?')) {
-      // Toggle selection to mark for deletion
       toggleLeadSelection(lead.id)
     }
-    setMenuOpen(null)
   }
 
   const handleEnrich = (lead: LocalLead) => {
     // Select the lead and parent will handle enrichment
     toggleLeadSelection(lead.id)
-    setMenuOpen(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -72,6 +72,50 @@ export function LeadsTable({
       skipped: 'bg-gray-500/20 text-gray-400 border border-gray-500/30',
     }
     return badges[status] || 'badge-pending'
+  }
+
+  const getSocialIcon = (url: string) => {
+    const lower = url.toLowerCase()
+    if (lower.includes('facebook.com')) return Facebook
+    if (lower.includes('linkedin.com')) return Linkedin
+    if (lower.includes('instagram.com')) return Instagram
+    if (lower.includes('twitter.com') || lower.includes('x.com')) return Twitter
+    if (lower.includes('youtube.com')) return Youtube
+    if (lower.includes('tiktok.com')) return Globe // No TikTok icon in lucide, use Globe
+    return Globe
+  }
+
+  const getAddressFromLead = (lead: LocalLead) => {
+    const enrichData = lead.enrichment_data as Record<string, unknown> | undefined
+    const addresses = (enrichData?.addresses as string[]) || []
+    if (addresses.length > 0) return addresses[0]
+
+    // Fallback to lead fields
+    const parts = [lead.address, lead.city, lead.state, lead.postal_code].filter(Boolean)
+    return parts.length > 0 ? parts.join(', ') : null
+  }
+
+  const getSocialsFromLead = (lead: LocalLead) => {
+    const enrichData = lead.enrichment_data as Record<string, unknown> | undefined
+    const socials: string[] = []
+
+    // Add Facebook if found
+    if (enrichData?.facebookUrl) {
+      socials.push(enrichData.facebookUrl as string)
+    }
+
+    // Add other socials from enrichment
+    if (enrichData?.socials && Array.isArray(enrichData.socials)) {
+      socials.push(...(enrichData.socials as string[]))
+    }
+
+    // Add LinkedIn from lead data
+    if (lead.linkedin_url) {
+      socials.push(lead.linkedin_url)
+    }
+
+    // Dedupe
+    return [...new Set(socials)]
   }
 
   if (leads.length === 0) {
@@ -99,12 +143,14 @@ export function LeadsTable({
                   className="w-4 h-4 rounded border-fl-border bg-fl-bg-surface text-fl-primary focus:ring-fl-primary"
                 />
               </th>
+              <th className="w-24">Actions</th>
               <th>Name</th>
               <th>Contact</th>
               <th>Company</th>
+              <th>Address</th>
+              <th>Socials</th>
               <th>Status</th>
               <th>Enrichment</th>
-              <th className="w-10"></th>
             </tr>
           </thead>
           <tbody>
@@ -122,6 +168,40 @@ export function LeadsTable({
                     onChange={() => toggleLeadSelection(lead.id)}
                     className="w-4 h-4 rounded border-fl-border bg-fl-bg-surface text-fl-primary focus:ring-fl-primary"
                   />
+                </td>
+                <td>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleEnrich(lead)}
+                      className="p-1.5 rounded hover:bg-fl-primary/20 text-fl-text-muted hover:text-fl-primary transition-colors group relative"
+                      title="Enrich"
+                    >
+                      <Sparkles size={14} />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-fl-bg-elevated border border-fl-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        Enrich
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setEditingLead(lead)}
+                      className="p-1.5 rounded hover:bg-fl-primary/20 text-fl-text-muted hover:text-fl-primary transition-colors group relative"
+                      title="Edit"
+                    >
+                      <Edit size={14} />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-fl-bg-elevated border border-fl-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        Edit
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(lead)}
+                      className="p-1.5 rounded hover:bg-fl-error/20 text-fl-text-muted hover:text-fl-error transition-colors group relative"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-fl-bg-elevated border border-fl-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        Delete
+                      </span>
+                    </button>
+                  </div>
                 </td>
                 <td>
                   <div>
@@ -186,6 +266,48 @@ export function LeadsTable({
                   </div>
                 </td>
                 <td>
+                  {(() => {
+                    const address = getAddressFromLead(lead)
+                    return address ? (
+                      <div className="flex items-start gap-1 text-sm text-fl-text-secondary max-w-[200px]">
+                        <MapPin size={12} className="mt-0.5 flex-shrink-0 text-fl-text-muted" />
+                        <span className="truncate" title={address}>{address}</span>
+                      </div>
+                    ) : (
+                      <span className="text-fl-text-muted text-sm">-</span>
+                    )
+                  })()}
+                </td>
+                <td>
+                  {(() => {
+                    const socials = getSocialsFromLead(lead)
+                    return socials.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        {socials.slice(0, 4).map((url, i) => {
+                          const Icon = getSocialIcon(url)
+                          return (
+                            <a
+                              key={i}
+                              href={url.startsWith('http') ? url : `https://${url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 rounded hover:bg-fl-primary/20 text-fl-text-muted hover:text-fl-primary transition-colors"
+                              title={url}
+                            >
+                              <Icon size={14} />
+                            </a>
+                          )
+                        })}
+                        {socials.length > 4 && (
+                          <span className="text-xs text-fl-text-muted">+{socials.length - 4}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-fl-text-muted text-sm">-</span>
+                    )
+                  })()}
+                </td>
+                <td>
                   <span className={`badge ${getStatusBadge(lead.status)}`}>
                     {lead.status}
                   </span>
@@ -195,68 +317,19 @@ export function LeadsTable({
                     {lead.enrichment_status}
                   </span>
                 </td>
-                <td>
-                  <div className="relative">
-                    <button
-                      onClick={() => setMenuOpen(menuOpen === lead.id ? null : lead.id)}
-                      className="p-1 rounded hover:bg-fl-bg-surface"
-                    >
-                      <MoreVertical size={16} className="text-fl-text-muted" />
-                    </button>
-
-                    {menuOpen === lead.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setMenuOpen(null)}
-                        />
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="absolute right-0 top-full mt-1 w-40 py-1 rounded-lg bg-fl-bg-elevated border border-fl-border shadow-xl z-20"
-                        >
-                          <button
-                            onClick={() => handleEnrich(lead)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-fl-text-primary hover:bg-fl-bg-surface"
-                          >
-                            <Sparkles size={14} />
-                            Enrich
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingLead(lead)
-                              setMenuOpen(null)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-fl-text-primary hover:bg-fl-bg-surface"
-                          >
-                            <Edit size={14} />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(lead)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-fl-error hover:bg-fl-error/10"
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </motion.div>
-                      </>
-                    )}
-                  </div>
-                </td>
               </motion.tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Edit Modal - disabled for local leads */}
-      {/* {editingLead && (
+      {/* Edit Modal */}
+      {editingLead && (
         <LeadFormModal
           lead={editingLead}
           onClose={() => setEditingLead(null)}
         />
-      )} */}
+      )}
     </>
   )
 }

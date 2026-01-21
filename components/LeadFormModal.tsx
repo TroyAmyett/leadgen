@@ -3,18 +3,15 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, User, Building, Mail, Phone, Globe, Linkedin } from 'lucide-react'
-import { useAuthStore } from '@/stores/authStore'
-import { useLeadsStore } from '@/stores/leadsStore'
-import type { Lead, LeadInsert, LeadUpdate } from '@/lib/types/database'
+import { useLeadsStore, LocalLead } from '@/stores/leadsStore'
 
 interface LeadFormModalProps {
-  lead?: Lead
+  lead?: LocalLead
   onClose: () => void
 }
 
 export function LeadFormModal({ lead, onClose }: LeadFormModalProps) {
-  const { user, accountId } = useAuthStore()
-  const { createLead, updateLead } = useLeadsStore()
+  const { updateLocalLead, importLeads } = useLeadsStore()
 
   const [formData, setFormData] = useState({
     first_name: lead?.first_name || '',
@@ -38,42 +35,40 @@ export function LeadFormModal({ lead, onClose }: LeadFormModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !accountId) return
 
     setIsSubmitting(true)
     setError(null)
 
     try {
       if (lead) {
-        // Update existing lead
-        const updates: LeadUpdate = {
-          ...formData,
-          updated_by: user.id,
-          updated_by_type: 'user',
-        }
-        const success = await updateLead(lead.id, updates)
-        if (!success) {
-          setError('Failed to update lead')
-          return
-        }
+        // Update existing local lead
+        updateLocalLead(lead.id, {
+          first_name: formData.first_name || null,
+          last_name: formData.last_name || null,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          company: formData.company || null,
+          title: formData.title || null,
+          website: formData.website || null,
+          linkedin_url: formData.linkedin_url || null,
+        })
       } else {
-        // Create new lead
-        const newLead: LeadInsert = {
-          ...formData,
-          account_id: accountId,
-          created_by: user.id,
-          created_by_type: 'user',
-          updated_by: user.id,
-          updated_by_type: 'user',
+        // Create new local lead
+        const newLead: LocalLead = {
+          id: crypto.randomUUID(),
+          first_name: formData.first_name || null,
+          last_name: formData.last_name || null,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          company: formData.company || null,
+          title: formData.title || null,
+          website: formData.website || null,
+          linkedin_url: formData.linkedin_url || null,
           source: 'manual',
           status: 'new',
           enrichment_status: 'pending',
         }
-        const created = await createLead(newLead)
-        if (!created) {
-          setError('Failed to create lead')
-          return
-        }
+        importLeads([newLead])
       }
 
       onClose()
