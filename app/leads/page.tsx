@@ -173,29 +173,36 @@ export default function LeadsPage() {
   const handleExport = () => {
     if (filteredLeads.length === 0) return
 
-    const headers = [
-      'First Name',
-      'Last Name',
-      'Email',
-      'Phone',
-      'Company',
-      'Title',
-      'Website',
-      'Status',
-      'Enrichment Status',
-    ]
+    // Get all unique keys from original_data across all leads
+    const originalKeys = new Set<string>()
+    filteredLeads.forEach((lead) => {
+      if (lead.original_data) {
+        Object.keys(lead.original_data).forEach((key) => originalKeys.add(key))
+      }
+    })
 
-    const rows = filteredLeads.map((lead) => [
-      lead.first_name || '',
-      lead.last_name || '',
-      lead.email || '',
-      lead.phone || '',
-      lead.company || '',
-      lead.title || '',
-      lead.website || '',
-      lead.status,
-      lead.enrichment_status,
-    ])
+    // Build headers: original CSV columns + enriched fields
+    const enrichedFields = ['_enriched_email', '_enriched_phone', '_enriched_website', '_enrichment_status']
+    const headers = [...Array.from(originalKeys), ...enrichedFields]
+
+    // Build rows preserving original data and adding enriched data
+    const rows = filteredLeads.map((lead) => {
+      const row: string[] = []
+
+      // Add original data columns
+      originalKeys.forEach((key) => {
+        const value = lead.original_data?.[key]
+        row.push(value !== undefined && value !== null ? String(value) : '')
+      })
+
+      // Add enriched fields
+      row.push(lead.email || '') // _enriched_email
+      row.push(lead.phone || '') // _enriched_phone
+      row.push(lead.website || '') // _enriched_website
+      row.push(lead.enrichment_status) // _enrichment_status
+
+      return row
+    })
 
     const csvContent = [
       headers.join(','),
