@@ -173,15 +173,28 @@ export default function LeadsPage() {
   const handleExport = () => {
     if (filteredLeads.length === 0) return
 
-    // Get all unique keys from original_data across all leads
-    const originalKeys = new Set<string>()
+    // Get original column order from the first lead's original_data
+    // Use the first lead that has original_data to preserve column order
+    const firstLeadWithData = filteredLeads.find((lead) => lead.original_data)
+    const originalColumns: string[] = firstLeadWithData?.original_data
+      ? Object.keys(firstLeadWithData.original_data)
+      : []
+
+    // Also collect any additional columns from other leads (in case of mixed imports)
+    const allOriginalKeys = new Set<string>(originalColumns)
     filteredLeads.forEach((lead) => {
       if (lead.original_data) {
-        Object.keys(lead.original_data).forEach((key) => originalKeys.add(key))
+        Object.keys(lead.original_data).forEach((key) => allOriginalKeys.add(key))
+      }
+    })
+    // Add any extra keys not in the first lead's data (preserving order, extras at end)
+    allOriginalKeys.forEach((key) => {
+      if (!originalColumns.includes(key)) {
+        originalColumns.push(key)
       }
     })
 
-    // Build headers: original CSV columns + enriched fields
+    // Build headers: original CSV columns (in order) + enriched fields
     const enrichedFields = [
       '_enriched_email',
       '_enriched_phone',
@@ -193,28 +206,28 @@ export default function LeadsPage() {
       '_enriched_address',
       '_enrichment_status',
     ]
-    const headers = [...Array.from(originalKeys), ...enrichedFields]
+    const headers = [...originalColumns, ...enrichedFields]
 
     // Build rows preserving original data and adding enriched data
     const rows = filteredLeads.map((lead) => {
       const row: string[] = []
 
-      // Add original data columns
-      originalKeys.forEach((key) => {
+      // Add original data columns in order
+      originalColumns.forEach((key) => {
         const value = lead.original_data?.[key]
         row.push(value !== undefined && value !== null ? String(value) : '')
       })
 
       // Add enriched fields from enrichment_data
-      const enrichData = lead.enrichment_data || {}
-      row.push(enrichData.emails?.[0]?.email || lead.email || '') // _enriched_email
-      row.push(enrichData.phones?.[0] || lead.phone || '') // _enriched_phone
-      row.push(enrichData.url || lead.website || '') // _enriched_website
-      row.push(enrichData.facebookUrl || '') // _enriched_facebook
-      row.push((enrichData.socials || []).join('; ')) // _enriched_socials
-      row.push(enrichData.officeEmail || '') // _enriched_office_email
-      row.push(enrichData.officePhone || '') // _enriched_office_phone
-      row.push((enrichData.addresses || []).join('; ')) // _enriched_address
+      const enrichData = (lead.enrichment_data || {}) as Record<string, unknown>
+      row.push((enrichData.emails as Array<{email: string}>)?.[0]?.email || lead.email || '') // _enriched_email
+      row.push((enrichData.phones as string[])?.[0] || lead.phone || '') // _enriched_phone
+      row.push((enrichData.url as string) || lead.website || '') // _enriched_website
+      row.push((enrichData.facebookUrl as string) || '') // _enriched_facebook
+      row.push(((enrichData.socials as string[]) || []).join('; ')) // _enriched_socials
+      row.push((enrichData.officeEmail as string) || '') // _enriched_office_email
+      row.push((enrichData.officePhone as string) || '') // _enriched_office_phone
+      row.push(((enrichData.addresses as string[]) || []).join('; ')) // _enriched_address
       row.push(lead.enrichment_status) // _enrichment_status
 
       return row
