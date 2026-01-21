@@ -1,10 +1,10 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Upload, Database, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, Upload, Settings } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 
-export type LeadGenTab = 'dashboard' | 'leads' | 'import' | 'enrichment' | 'settings'
+export type LeadGenTab = 'dashboard' | 'leads' | 'import' | 'settings'
 
 interface SidebarItem {
   id: LeadGenTab
@@ -17,7 +17,6 @@ const sidebarItems: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { id: 'leads', label: 'Leads', icon: Users, href: '/leads' },
   { id: 'import', label: 'Import', icon: Upload, href: '/import' },
-  { id: 'enrichment', label: 'Enrichment', icon: Database, href: '/enrichment' },
 ]
 
 const settingsItem: SidebarItem = { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' }
@@ -36,7 +35,6 @@ export function LeadGenSidebar() {
     if (pathname === '/') return 'dashboard'
     if (pathname.startsWith('/leads')) return 'leads'
     if (pathname === '/import') return 'import'
-    if (pathname === '/enrichment') return 'enrichment'
     if (pathname === '/settings') return 'settings'
     return 'dashboard'
   }
