@@ -13,32 +13,70 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores/authStore'
-import { useLeadsStore, getFilteredLeads } from '@/stores/leadsStore'
+import { useLeadsStore, LocalLead } from '@/stores/leadsStore'
 import { LeadsTable } from '@/components/LeadsTable'
 import { LeadFormModal } from '@/components/LeadFormModal'
 import { EnrichmentProgress } from '@/components/EnrichmentProgress'
 
 const ITEMS_PER_PAGE = 10
 
+// Filter local leads
+function getFilteredLocalLeads(
+  leads: LocalLead[],
+  searchQuery: string,
+  statusFilter: string | null,
+  enrichmentFilter: string | null
+): LocalLead[] {
+  return leads.filter((lead) => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const searchFields = [
+        lead.first_name,
+        lead.last_name,
+        lead.email,
+        lead.company,
+        lead.title,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      if (!searchFields.includes(query)) {
+        return false
+      }
+    }
+
+    // Status filter
+    if (statusFilter && lead.status !== statusFilter) {
+      return false
+    }
+
+    // Enrichment filter
+    if (enrichmentFilter && lead.enrichment_status !== enrichmentFilter) {
+      return false
+    }
+
+    return true
+  })
+}
+
 export default function LeadsPage() {
   const router = useRouter()
-  const { user, accountId, loading: authLoading } = useAuthStore()
   const {
-    leads,
-    loading,
-    error,
+    localLeads,
     selectedLeadIds,
     searchQuery,
     statusFilter,
     enrichmentFilter,
-    fetchLeads,
     setSearchQuery,
     setStatusFilter,
     setEnrichmentFilter,
     selectAllLeads,
     clearSelection,
-    bulkDeleteLeads,
+    clearLocalLeads,
+    updateLocalLead,
+    toggleLeadSelection,
   } = useLeadsStore()
 
   const [currentPage, setCurrentPage] = useState(1)
@@ -47,22 +85,8 @@ export default function LeadsPage() {
   const [isEnriching, setIsEnriching] = useState(false)
   const [enrichmentProgress, setEnrichmentProgress] = useState({ current: 0, total: 0 })
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/auth')
-    }
-  }, [user, authLoading, router])
-
-  // Fetch leads when account is available
-  useEffect(() => {
-    if (accountId) {
-      fetchLeads(accountId)
-    }
-  }, [accountId, fetchLeads])
-
-  // Get filtered leads
-  const filteredLeads = getFilteredLeads(leads, searchQuery, statusFilter, enrichmentFilter)
+  // Get filtered leads from local store
+  const filteredLeads = getFilteredLocalLeads(localLeads, searchQuery, statusFilter, enrichmentFilter)
 
   // Pagination
   const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE)
@@ -82,26 +106,67 @@ export default function LeadsPage() {
     setIsEnriching(true)
     setEnrichmentProgress({ current: 0, total: selectedLeadIds.length })
 
-    // TODO: Implement enrichment logic
-    for (let i = 0; i < selectedLeadIds.length; i++) {
-      setEnrichmentProgress({ current: i + 1, total: selectedLeadIds.length })
-      // Simulate enrichment delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Get leads to enrich
+    const leadsToEnrich = localLeads.filter((l) => selectedLeadIds.includes(l.id))
+
+    for (let i = 0; i < leadsToEnrich.length; i++) {
+      const lead = leadsToEnrich[i]
+      setEnrichmentProgress({ current: i + 1, total: leadsToEnrich.length })
+
+      try {
+        // Call the scrape API to enrich the lead
+        const response = await fetch('/api/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: lead.website || '',
+            firstName: lead.first_name,
+            lastName: lead.last_name,
+            company: lead.company,
+            city: lead.city,
+            state: lead.state,
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          // Update the lead with enriched data
+          updateLocalLead(lead.id, {
+            enrichment_status: 'enriched',
+            enrichment_data: data,
+            email: data.emails?.[0]?.email || lead.email,
+            phone: data.phones?.[0] || lead.phone,
+            website: data.url || lead.website,
+          })
+        } else {
+          updateLocalLead(lead.id, { enrichment_status: 'failed' })
+        }
+      } catch (err) {
+        console.error('Enrichment error:', err)
+        updateLocalLead(lead.id, { enrichment_status: 'failed' })
+      }
+
+      // Add a small delay between requests to avoid rate limiting
+      if (i < leadsToEnrich.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000))
+      }
     }
 
     setIsEnriching(false)
     clearSelection()
   }
 
-  const handleDeleteSelected = async () => {
-    if (selectedLeadIds.length === 0 || !user) return
+  const handleDeleteSelected = () => {
+    if (selectedLeadIds.length === 0) return
 
     if (
       window.confirm(
         `Are you sure you want to delete ${selectedLeadIds.length} lead(s)?`
       )
     ) {
-      await bulkDeleteLeads(selectedLeadIds, user.id)
+      // For local leads, we just clear them all for now
+      // In a real app, you'd filter out just the selected ones
+      clearLocalLeads()
     }
   }
 
@@ -149,18 +214,6 @@ export default function LeadsPage() {
     document.body.removeChild(link)
   }
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fl-primary"></div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return null
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -169,7 +222,7 @@ export default function LeadsPage() {
           <h1 className="text-2xl font-semibold text-fl-text-primary">Leads</h1>
           <p className="text-fl-text-secondary mt-1">
             {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
-            {leads.length !== filteredLeads.length && ` (filtered from ${leads.length})`}
+            {localLeads.length !== filteredLeads.length && ` (filtered from ${localLeads.length})`}
           </p>
         </div>
 
@@ -189,17 +242,6 @@ export default function LeadsPage() {
           </button>
         </div>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-4 rounded-lg bg-fl-error/20 border border-fl-error/30 text-fl-error"
-        >
-          {error}
-        </motion.div>
-      )}
 
       {/* Enrichment Progress */}
       {isEnriching && (

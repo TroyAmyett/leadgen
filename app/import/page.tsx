@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Upload, FileText, ArrowRight, Check, AlertCircle, X } from 'lucide-react'
 import Papa from 'papaparse'
-import { useAuthStore } from '@/stores/authStore'
+import { useLeadsStore, LocalLead } from '@/stores/leadsStore'
 
 type ImportStep = 'upload' | 'mapping' | 'preview' | 'complete'
 
@@ -71,7 +71,7 @@ const AUTO_MAPPING: Record<string, string> = {
 
 export default function ImportPage() {
   const router = useRouter()
-  const { user, accountId, loading: authLoading } = useAuthStore()
+  const importLeads = useLeadsStore((state) => state.importLeads)
 
   const [step, setStep] = useState<ImportStep>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -86,19 +86,12 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/auth')
-    }
-  }, [user, authLoading, router])
-
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
 
     const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile && droppedFile.type === 'text/csv') {
+    if (droppedFile && (droppedFile.type === 'text/csv' || droppedFile.name.endsWith('.csv'))) {
       processFile(droppedFile)
     } else {
       setError('Please upload a CSV file')
@@ -151,36 +144,85 @@ export default function ImportPage() {
   }
 
   const handleImport = async () => {
-    if (!parsedData || !user || !accountId) return
+    if (!parsedData) return
 
     setIsImporting(true)
     setError(null)
 
     try {
-      const response = await fetch('/api/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          leads: parsedData.rows,
-          columnMapping,
-          accountId,
-          userId: user.id,
-          filename: file?.name || 'import.csv',
-        }),
-      })
+      // Map rows to leads directly in memory (no API call needed)
+      const mappedLeads: LocalLead[] = []
+      const errors: string[] = []
 
-      const result = await response.json()
+      for (let i = 0; i < parsedData.rows.length; i++) {
+        const row = parsedData.rows[i]
+        try {
+          const lead: LocalLead = {
+            id: crypto.randomUUID(),
+            source: 'csv_import',
+            status: 'new',
+            enrichment_status: 'pending',
+            original_data: row,
+          }
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Import failed')
+          // Map fields based on column mapping
+          for (const [csvColumn, leadField] of Object.entries(columnMapping)) {
+            const value = row[csvColumn]
+            if (value !== undefined && value !== null && value !== '') {
+              switch (leadField) {
+                case 'first_name':
+                  lead.first_name = String(value)
+                  break
+                case 'last_name':
+                  lead.last_name = String(value)
+                  break
+                case 'email':
+                  lead.email = String(value).toLowerCase()
+                  break
+                case 'phone':
+                  lead.phone = String(value)
+                  break
+                case 'company':
+                  lead.company = String(value)
+                  break
+                case 'title':
+                  lead.title = String(value)
+                  break
+                case 'website':
+                  lead.website = String(value)
+                  break
+                case 'linkedin_url':
+                  lead.linkedin_url = String(value)
+                  break
+                case 'address':
+                  lead.address = String(value)
+                  break
+                case 'city':
+                  lead.city = String(value)
+                  break
+                case 'state':
+                  lead.state = String(value)
+                  break
+                case 'postal_code':
+                  lead.postal_code = String(value)
+                  break
+              }
+            }
+          }
+
+          mappedLeads.push(lead)
+        } catch (err) {
+          errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
       }
 
+      // Store leads in the zustand store
+      importLeads(mappedLeads)
+
       setImportResult({
-        imported: result.imported,
-        failed: result.failed,
-        errors: result.errors || [],
+        imported: mappedLeads.length,
+        failed: errors.length,
+        errors: errors.slice(0, 10),
       })
       setStep('complete')
     } catch (err) {
@@ -190,25 +232,13 @@ export default function ImportPage() {
     }
   }
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fl-primary"></div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return null
-  }
-
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-fl-text-primary">Import Leads</h1>
         <p className="text-fl-text-secondary mt-1">
-          Upload a CSV file to import leads into your account
+          Upload a CSV file to import leads for enrichment
         </p>
       </div>
 

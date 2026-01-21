@@ -2,8 +2,31 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
 import type { Lead, LeadInsert, LeadUpdate } from '@/lib/types/database'
 
+// Type for in-memory leads (simpler than database Lead type)
+export interface LocalLead {
+  id: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  company?: string | null
+  title?: string | null
+  website?: string | null
+  linkedin_url?: string | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  postal_code?: string | null
+  source: string
+  status: string
+  enrichment_status: string
+  original_data?: Record<string, unknown>
+  enrichment_data?: Record<string, unknown>
+}
+
 interface LeadsState {
   leads: Lead[]
+  localLeads: LocalLead[]
   loading: boolean
   error: string | null
   selectedLeadIds: string[]
@@ -17,6 +40,9 @@ interface LeadsState {
   updateLead: (id: string, updates: LeadUpdate) => Promise<boolean>
   deleteLead: (id: string, userId: string) => Promise<boolean>
   bulkDeleteLeads: (ids: string[], userId: string) => Promise<boolean>
+  importLeads: (leads: LocalLead[]) => void
+  updateLocalLead: (id: string, updates: Partial<LocalLead>) => void
+  clearLocalLeads: () => void
   toggleLeadSelection: (id: string) => void
   selectAllLeads: () => void
   clearSelection: () => void
@@ -28,6 +54,7 @@ interface LeadsState {
 
 export const useLeadsStore = create<LeadsState>((set, get) => ({
   leads: [],
+  localLeads: [],
   loading: false,
   error: null,
   selectedLeadIds: [],
@@ -187,9 +214,26 @@ export const useLeadsStore = create<LeadsState>((set, get) => ({
   },
 
   selectAllLeads: () => {
-    const { leads, searchQuery, statusFilter, enrichmentFilter } = get()
-    const filteredLeads = getFilteredLeads(leads, searchQuery, statusFilter, enrichmentFilter)
-    set({ selectedLeadIds: filteredLeads.map((lead) => lead.id) })
+    const { leads, localLeads, searchQuery, statusFilter, enrichmentFilter } = get()
+    // Prioritize local leads if they exist, otherwise use DB leads
+    if (localLeads.length > 0) {
+      // Filter local leads using basic filtering
+      const filteredLocalLeads = localLeads.filter((lead) => {
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase()
+          const searchFields = [lead.first_name, lead.last_name, lead.email, lead.company, lead.title]
+            .filter(Boolean).join(' ').toLowerCase()
+          if (!searchFields.includes(query)) return false
+        }
+        if (statusFilter && lead.status !== statusFilter) return false
+        if (enrichmentFilter && lead.enrichment_status !== enrichmentFilter) return false
+        return true
+      })
+      set({ selectedLeadIds: filteredLocalLeads.map((lead) => lead.id) })
+    } else {
+      const filteredLeads = getFilteredLeads(leads, searchQuery, statusFilter, enrichmentFilter)
+      set({ selectedLeadIds: filteredLeads.map((lead) => lead.id) })
+    }
   },
 
   clearSelection: () => {
@@ -210,6 +254,24 @@ export const useLeadsStore = create<LeadsState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  importLeads: (leads: LocalLead[]) => {
+    set((state) => ({
+      localLeads: [...leads, ...state.localLeads],
+    }))
+  },
+
+  updateLocalLead: (id: string, updates: Partial<LocalLead>) => {
+    set((state) => ({
+      localLeads: state.localLeads.map((lead) =>
+        lead.id === id ? { ...lead, ...updates } : lead
+      ),
+    }))
+  },
+
+  clearLocalLeads: () => {
+    set({ localLeads: [], selectedLeadIds: [] })
   },
 }))
 

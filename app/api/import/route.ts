@@ -1,70 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
-import type { LeadInsert, Json } from '@/lib/types/database'
 
 interface ImportRequest {
   leads: Array<Record<string, unknown>>
   columnMapping: Record<string, string>
-  accountId: string
-  userId: string
-  filename: string
+  filename?: string
+}
+
+interface MappedLead {
+  id: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  phone?: string
+  company?: string
+  title?: string
+  website?: string
+  linkedin_url?: string
+  address?: string
+  city?: string
+  state?: string
+  postal_code?: string
+  source: string
+  status: string
+  enrichment_status: string
+  original_data: Record<string, unknown>
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient()
     const body: ImportRequest = await request.json()
-    const { leads, columnMapping, accountId, userId, filename } = body
+    const { leads, columnMapping, filename } = body
 
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
       return NextResponse.json({ error: 'No leads to import' }, { status: 400 })
     }
 
-    if (!accountId || !userId) {
-      return NextResponse.json(
-        { error: 'accountId and userId required' },
-        { status: 400 }
-      )
-    }
-
-    // Create import batch record
-    const { data: batch, error: batchError } = await supabase
-      .from('import_batches')
-      .insert({
-        account_id: accountId,
-        filename: filename || 'import.csv',
-        total_rows: leads.length,
-        column_mapping: columnMapping,
-        status: 'processing',
-        started_at: new Date().toISOString(),
-        created_by: userId,
-        created_by_type: 'user',
-      })
-      .select()
-      .single()
-
-    if (batchError) throw batchError
-
-    // Map CSV rows to lead records
-    let importedCount = 0
-    let failedCount = 0
+    // Map CSV rows to lead objects (in-memory only, no database)
+    const mappedLeads: MappedLead[] = []
     const errors: string[] = []
-
-    const leadsToInsert: LeadInsert[] = []
 
     for (let i = 0; i < leads.length; i++) {
       const row = leads[i]
       try {
-        const lead: LeadInsert = {
-          account_id: accountId,
-          created_by: userId,
-          created_by_type: 'user',
-          updated_by: userId,
-          updated_by_type: 'user',
+        const lead: MappedLead = {
+          id: crypto.randomUUID(),
           source: 'csv_import',
-          source_details: { batch_id: batch.id, row_index: i, original_data: row as Record<string, string> } as unknown as Json,
-          enrichment_status: 'pending',
           status: 'new',
+          enrichment_status: 'pending',
+          original_data: row as Record<string, unknown>,
         }
 
         // Map fields based on column mapping
@@ -96,52 +79,36 @@ export async function POST(request: NextRequest) {
               case 'linkedin_url':
                 lead.linkedin_url = String(value)
                 break
-              // Add more field mappings as needed
+              case 'address':
+                lead.address = String(value)
+                break
+              case 'city':
+                lead.city = String(value)
+                break
+              case 'state':
+                lead.state = String(value)
+                break
+              case 'postal_code':
+                lead.postal_code = String(value)
+                break
             }
           }
         }
 
-        leadsToInsert.push(lead)
+        mappedLeads.push(lead)
       } catch (err) {
-        failedCount++
         errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : 'Unknown error'}`)
       }
     }
 
-    // Bulk insert leads
-    if (leadsToInsert.length > 0) {
-      const { data: insertedLeads, error: insertError } = await supabase
-        .from('leads')
-        .insert(leadsToInsert)
-        .select()
-
-      if (insertError) {
-        console.error('Bulk insert error:', insertError)
-        failedCount += leadsToInsert.length
-      } else {
-        importedCount = insertedLeads?.length || 0
-      }
-    }
-
-    // Update batch record
-    await supabase
-      .from('import_batches')
-      .update({
-        imported_rows: importedCount,
-        failed_rows: failedCount,
-        status: failedCount === leads.length ? 'failed' : 'completed',
-        completed_at: new Date().toISOString(),
-        error: errors.length > 0 ? errors.slice(0, 10).join('; ') : null,
-      })
-      .eq('id', batch.id)
-
     return NextResponse.json({
       success: true,
-      batch_id: batch.id,
-      imported: importedCount,
-      failed: failedCount,
+      imported: mappedLeads.length,
+      failed: errors.length,
       total: leads.length,
+      leads: mappedLeads,
       errors: errors.slice(0, 10),
+      filename: filename || 'import.csv',
     })
   } catch (error) {
     console.error('Import error:', error)

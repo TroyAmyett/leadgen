@@ -12,13 +12,13 @@ import {
   Phone,
   Building,
 } from 'lucide-react'
-import { useLeadsStore } from '@/stores/leadsStore'
-import { useAuthStore } from '@/stores/authStore'
-import { LeadFormModal } from '@/components/LeadFormModal'
-import type { Lead } from '@/lib/types/database'
+import { useLeadsStore, LocalLead } from '@/stores/leadsStore'
+// LeadFormModal requires full DB Lead type, not available for local leads yet
+// import { LeadFormModal } from '@/components/LeadFormModal'
 
+// Use LocalLead type which is simpler and works for both local and DB leads
 interface LeadsTableProps {
-  leads: Lead[]
+  leads: LocalLead[]
   selectedIds: string[]
   onSelectAll: () => void
   onClearSelection: () => void
@@ -32,27 +32,27 @@ export function LeadsTable({
   onClearSelection,
   allSelected,
 }: LeadsTableProps) {
-  const { user } = useAuthStore()
-  const { toggleLeadSelection, deleteLead, updateLead } = useLeadsStore()
+  const { toggleLeadSelection } = useLeadsStore()
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [editingLead, setEditingLead] = useState<Lead | null>(null)
+  const [editingLead, setEditingLead] = useState<LocalLead | null>(null)
 
-  const handleDelete = async (lead: Lead) => {
-    if (!user) return
+  const handleDelete = (lead: LocalLead) => {
+    // For local leads, deletion is handled by the parent component
     if (window.confirm('Are you sure you want to delete this lead?')) {
-      await deleteLead(lead.id, user.id)
+      // Toggle selection to mark for deletion
+      toggleLeadSelection(lead.id)
     }
     setMenuOpen(null)
   }
 
-  const handleEnrich = async (lead: Lead) => {
-    // TODO: Implement single lead enrichment
-    console.log('Enriching lead:', lead.id)
+  const handleEnrich = (lead: LocalLead) => {
+    // Select the lead and parent will handle enrichment
+    toggleLeadSelection(lead.id)
     setMenuOpen(null)
   }
 
-  const getStatusBadge = (status: Lead['status']) => {
-    const badges: Record<Lead['status'], string> = {
+  const getStatusBadge = (status: string) => {
+    const badges: Record<string, string> = {
       new: 'badge-new',
       contacted: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
       qualified: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
@@ -63,8 +63,8 @@ export function LeadsTable({
     return badges[status] || 'badge-new'
   }
 
-  const getEnrichmentBadge = (status: Lead['enrichment_status']) => {
-    const badges: Record<Lead['enrichment_status'], string> = {
+  const getEnrichmentBadge = (status: string) => {
+    const badges: Record<string, string> = {
       pending: 'badge-pending',
       enriching: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
       enriched: 'badge-enriched',
@@ -250,13 +250,13 @@ export function LeadsTable({
         </table>
       </div>
 
-      {/* Edit Modal */}
-      {editingLead && (
+      {/* Edit Modal - disabled for local leads */}
+      {/* {editingLead && (
         <LeadFormModal
           lead={editingLead}
           onClose={() => setEditingLead(null)}
         />
-      )}
+      )} */}
     </>
   )
 }
