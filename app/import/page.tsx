@@ -24,6 +24,10 @@ const LEAD_FIELDS = [
   { value: 'title', label: 'Title' },
   { value: 'website', label: 'Website' },
   { value: 'linkedin_url', label: 'LinkedIn URL' },
+  { value: 'address', label: 'Address' },
+  { value: 'city', label: 'City' },
+  { value: 'state', label: 'State' },
+  { value: 'postal_code', label: 'Postal Code' },
 ]
 
 // Auto-mapping suggestions
@@ -52,6 +56,17 @@ const AUTO_MAPPING: Record<string, string> = {
   'web': 'website',
   'linkedin': 'linkedin_url',
   'linkedin url': 'linkedin_url',
+  'address': 'address',
+  'street': 'address',
+  'street address': 'address',
+  'city': 'city',
+  'state': 'state',
+  'province': 'state',
+  'postal code': 'postal_code',
+  'postalcode': 'postal_code',
+  'zip': 'postal_code',
+  'zip code': 'postal_code',
+  'zipcode': 'postal_code',
 }
 
 export default function ImportPage() {

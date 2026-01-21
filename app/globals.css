@@ -96,6 +96,13 @@ body::before {
            transition-colors duration-150;
   }
 
+  /* Select dropdown options - explicit dark styling */
+  select.input option,
+  select option {
+    background-color: #1a1a2e;
+    color: rgba(255, 255, 255, 0.95);
+  }
+
   /* Form label */
   .label {
     @apply block text-sm font-medium text-fl-text-secondary mb-1;
