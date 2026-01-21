@@ -182,7 +182,17 @@ export default function LeadsPage() {
     })
 
     // Build headers: original CSV columns + enriched fields
-    const enrichedFields = ['_enriched_email', '_enriched_phone', '_enriched_website', '_enrichment_status']
+    const enrichedFields = [
+      '_enriched_email',
+      '_enriched_phone',
+      '_enriched_website',
+      '_enriched_facebook',
+      '_enriched_socials',
+      '_enriched_office_email',
+      '_enriched_office_phone',
+      '_enriched_address',
+      '_enrichment_status',
+    ]
     const headers = [...Array.from(originalKeys), ...enrichedFields]
 
     // Build rows preserving original data and adding enriched data
@@ -195,10 +205,16 @@ export default function LeadsPage() {
         row.push(value !== undefined && value !== null ? String(value) : '')
       })
 
-      // Add enriched fields
-      row.push(lead.email || '') // _enriched_email
-      row.push(lead.phone || '') // _enriched_phone
-      row.push(lead.website || '') // _enriched_website
+      // Add enriched fields from enrichment_data
+      const enrichData = lead.enrichment_data || {}
+      row.push(enrichData.emails?.[0]?.email || lead.email || '') // _enriched_email
+      row.push(enrichData.phones?.[0] || lead.phone || '') // _enriched_phone
+      row.push(enrichData.url || lead.website || '') // _enriched_website
+      row.push(enrichData.facebookUrl || '') // _enriched_facebook
+      row.push((enrichData.socials || []).join('; ')) // _enriched_socials
+      row.push(enrichData.officeEmail || '') // _enriched_office_email
+      row.push(enrichData.officePhone || '') // _enriched_office_phone
+      row.push((enrichData.addresses || []).join('; ')) // _enriched_address
       row.push(lead.enrichment_status) // _enrichment_status
 
       return row
