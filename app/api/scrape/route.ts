@@ -101,9 +101,10 @@ export async function POST(request: NextRequest) {
       officeEmails,
       officePhones,
       addresses,
+      people,
     } = firstScrape
     console.log(
-      `Phase 1 Results: E:${emails.length}, P:${phones.length}, Soc:${socials.length}, Int:${internalLinks.length}`
+      `Phase 1 Results: E:${emails.length}, P:${phones.length}, Soc:${socials.length}, Int:${internalLinks.length}, People:${people.length}`
     )
 
     // Check for Facebook in scraped socials
@@ -130,12 +131,38 @@ export async function POST(request: NextRequest) {
         officeEmails = [...officeEmails, ...(deeper.officeEmails || [])]
         officePhones = [...officePhones, ...(deeper.officePhones || [])]
         addresses = [...addresses, ...(deeper.addresses || [])]
+        people = [...people, ...(deeper.people || [])]
 
         const deeperFb = (deeper.socials || []).find((s) => s.includes('facebook.com'))
         if (deeperFb && !providedFb) providedFb = deeperFb
       }
     } else if (hasBasicInfo) {
       console.log('Phase 2: Skipped (already have email and phone)')
+    }
+
+    // Phase 2b: Scrape staff/team/leadership pages for names and titles
+    const staffPagePatterns = ['staff', 'team', 'leadership', 'about', 'our-team', 'meet-the-team', 'our-staff', 'pastors', 'ministers']
+    const staffUrls = internalLinks.filter((l) => {
+      const lower = l.toLowerCase()
+      return staffPagePatterns.some((p) => lower.includes(p))
+    }).slice(0, 2) // Limit to 2 staff pages to avoid slowdown
+
+    if (staffUrls.length > 0 && people.length === 0) {
+      console.log(`Phase 2b: Scraping staff pages -> ${staffUrls.length} pages`)
+      for (const staffUrl of staffUrls) {
+        try {
+          const staffScrape = await scrapePage(staffUrl)
+          if (staffScrape.people && staffScrape.people.length > 0) {
+            people = [...people, ...staffScrape.people]
+            console.log(`Found ${staffScrape.people.length} people from ${staffUrl}`)
+          }
+          // Also grab any additional contact info
+          emails = [...emails, ...(staffScrape.emails || [])]
+          phones = [...phones, ...(staffScrape.phones || [])]
+        } catch {
+          // ignore staff page errors
+        }
+      }
     }
 
     // Phase 3: Snippet fallback search (only if still missing critical info)
@@ -201,10 +228,22 @@ export async function POST(request: NextRequest) {
 
     scoredEmails.sort((a, b) => b.score - a.score)
 
+    // Dedupe people by name
+    const uniquePeople = people.reduce((acc, person) => {
+      const existing = acc.find((p) => p.name.toLowerCase() === person.name.toLowerCase())
+      if (!existing) {
+        acc.push(person)
+      } else if (person.title && !existing.title) {
+        existing.title = person.title
+      }
+      return acc
+    }, [] as typeof people)
+
     console.log('Phase 4: Returning Results', {
       foundOfficeEmail: !!officeEmails[0],
       foundOfficePhone: !!officePhones[0],
       emailsCount: scoredEmails.length,
+      peopleFound: uniquePeople.length,
     })
 
     return NextResponse.json({
@@ -215,6 +254,7 @@ export async function POST(request: NextRequest) {
       officeEmail: officeEmails && officeEmails.length > 0 ? officeEmails[0] : null,
       officePhone: officePhones && officePhones.length > 0 ? officePhones[0] : null,
       addresses: [...new Set(addresses)],
+      people: uniquePeople,
       url: cleanUrl(url && url.includes('facebook.com') ? null : url),
       success: true,
     })

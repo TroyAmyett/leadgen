@@ -177,6 +177,13 @@ export async function runSearch(query: string): Promise<SearchResult[]> {
   return []
 }
 
+interface PersonInfo {
+  name: string
+  title?: string
+  email?: string
+  phone?: string
+}
+
 interface PageScrapeResult {
   emails: string[]
   phones: string[]
@@ -185,6 +192,7 @@ interface PageScrapeResult {
   officeEmails: string[]
   officePhones: string[]
   internalLinks: string[]
+  people: PersonInfo[]
 }
 
 export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
@@ -356,6 +364,103 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       }
     }
 
+    // Extract people (names and titles)
+    const people: PersonInfo[] = []
+
+    // Title patterns - industry agnostic but includes church-specific ones
+    const titlePatterns = [
+      // Church/Religious
+      /(?:Senior\s+)?Pastor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Lead\s+)?Minister\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Rev(?:erend)?\.?\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Father|Fr\.)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Deacon|Elder)\s+([A-Z][a-z]+(?:\s+[A-z]+){1,2})/gi,
+      // Business titles
+      /(?:CEO|President|Owner|Founder)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Director|Manager|Coordinator)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Office\s+Manager)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:Contact|General\s+Manager)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+    ]
+
+    // Reverse patterns: "Name, Title" or "Name - Title"
+    const reverseTitlePatterns = [
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*[,\-–]\s*((?:Senior\s+)?Pastor|(?:Lead\s+)?Minister|Director|Manager|Coordinator|CEO|President|Owner|Office\s+Manager)/gi,
+    ]
+
+    // Extract from text content
+    for (const pattern of titlePatterns) {
+      let match
+      while ((match = pattern.exec(textContent)) !== null) {
+        const name = match[1]?.trim()
+        // Extract the title from the pattern (everything before the capture group)
+        const fullMatch = match[0]
+        const title = fullMatch.replace(name, '').replace(/[:\-\s]+$/, '').trim()
+        if (name && name.length > 3 && name.split(' ').length >= 2) {
+          // Avoid duplicates
+          if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+            people.push({ name, title: title || undefined })
+          }
+        }
+      }
+    }
+
+    // Try reverse patterns
+    for (const pattern of reverseTitlePatterns) {
+      let match
+      while ((match = pattern.exec(textContent)) !== null) {
+        const name = match[1]?.trim()
+        const title = match[2]?.trim()
+        if (name && name.length > 3 && name.split(' ').length >= 2) {
+          if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+            people.push({ name, title: title || undefined })
+          }
+        }
+      }
+    }
+
+    // Look for structured contact sections
+    $('*').each((_, el) => {
+      const $el = $(el)
+      const elText = $el.text().trim()
+
+      // Look for "Contact: Name" patterns
+      const contactMatch = elText.match(/Contact(?:\s+Person)?[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i)
+      if (contactMatch) {
+        const name = contactMatch[1].trim()
+        if (name && name.length > 3 && !people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+          people.push({ name, title: 'Contact' })
+        }
+      }
+    })
+
+    // Look for staff/team cards (common patterns in websites)
+    $('.staff, .team, .leadership, .our-team, .team-member, .staff-member, [class*="staff"], [class*="team-member"]').each((_, el) => {
+      const $el = $(el)
+      // Look for name in headings or strong tags
+      const nameEl = $el.find('h2, h3, h4, h5, strong, .name, .title, [class*="name"]').first()
+      const name = nameEl.text().trim()
+
+      // Look for title/position
+      const titleEl = $el.find('.position, .role, .job-title, [class*="position"], [class*="role"], [class*="title"]').first()
+      let title = titleEl.text().trim()
+
+      // If title element is same as name element, look elsewhere
+      if (title === name) {
+        title = $el.find('p, span').not(nameEl).first().text().trim()
+      }
+
+      if (name && name.length > 3 && name.split(' ').length >= 2 && name.length < 50) {
+        // Filter out obvious non-names
+        const isLikelyName = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(name)
+        if (isLikelyName && !people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+          people.push({
+            name,
+            title: title && title.length < 50 ? title : undefined
+          })
+        }
+      }
+    })
+
     return {
       emails: [...new Set([...emails, ...mailtoLinks, ...fbAdditionalEmails])],
       phones: [...new Set(phones)],
@@ -364,6 +469,7 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       officeEmails: [...new Set(footerEmails)],
       officePhones: [...new Set(footerPhones)],
       internalLinks: [...new Set(internalLinks)],
+      people,
     }
   } catch (error) {
     console.error(`Error scraping ${targetUrl}:`, error)
@@ -375,6 +481,7 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       officeEmails: [],
       officePhones: [],
       addresses: [],
+      people: [],
     }
   }
 }

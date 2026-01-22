@@ -203,6 +203,8 @@ export default function LeadsPage() {
       'Alt_City',
       'Alt_State',
       'Alt_Postal_Code',
+      'Contact_Name',
+      'Contact_Title',
       'Enrichment_Status',
     ]
 
@@ -318,6 +320,15 @@ export default function LeadsPage() {
       // Combined street for non-split address CSV (just street, NOT city/state/zip)
       const combinedStreet = street1
 
+      // Extract contact person from enrichment data
+      const people = (enrichData.people as Array<{name: string; title?: string}>) || []
+      const primaryContact = people.length > 0 ? people[0] : null
+      // Use enriched name if lead doesn't have one
+      const contactName = (lead.first_name || lead.last_name)
+        ? '' // Don't override if they already have a name
+        : primaryContact?.name || ''
+      const contactTitle = primaryContact?.title || lead.title || ''
+
       // Map of enriched field values
       const enrichedValues: Record<string, string> = {
         email: (enrichData.emails as Array<{email: string}>)?.[0]?.email || lead.email || '',
@@ -355,6 +366,15 @@ export default function LeadsPage() {
         alt_city: altCity,
         alt_state: altState,
         alt_postal_code: altPostalCode,
+        // Contact person from scraping
+        contact_name: contactName,
+        contact_title: contactTitle,
+        // Also map common variations
+        'first name': contactName ? contactName.split(' ')[0] : lead.first_name || '',
+        'last name': contactName ? contactName.split(' ').slice(1).join(' ') : lead.last_name || '',
+        first_name: contactName ? contactName.split(' ')[0] : lead.first_name || '',
+        last_name: contactName ? contactName.split(' ').slice(1).join(' ') : lead.last_name || '',
+        title: contactTitle,
         enrichment_status: lead.enrichment_status,
       }
 
