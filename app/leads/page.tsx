@@ -61,6 +61,9 @@ function getFilteredLocalLeads(
   })
 }
 
+// Threshold for auto-export after bulk enrichment
+const AUTO_EXPORT_THRESHOLD = 10
+
 export default function LeadsPage() {
   const router = useRouter()
   const {
@@ -100,9 +103,192 @@ export default function LeadsPage() {
     setCurrentPage(1)
   }, [searchQuery, statusFilter, enrichmentFilter])
 
+  // Format phone number to US format (xxx) xxx-xxxx
+  const formatUSPhone = (phone: string | null | undefined): string => {
+    if (!phone) return ''
+    // Remove all non-digits
+    const digits = phone.replace(/\D/g, '')
+    // Handle 10-digit numbers
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+    }
+    // Handle 11-digit numbers starting with 1
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+    }
+    // Return original if doesn't match expected format
+    return phone
+  }
+
+  // Extract social URL by platform
+  const extractSocialByPlatform = (socials: string[], platform: string): string => {
+    const patterns: Record<string, string[]> = {
+      facebook: ['facebook.com'],
+      linkedin: ['linkedin.com'],
+      instagram: ['instagram.com'],
+      twitter: ['twitter.com', 'x.com'],
+      youtube: ['youtube.com'],
+      tiktok: ['tiktok.com'],
+    }
+    const urls = patterns[platform] || []
+    const match = socials.find(s => urls.some(u => s.toLowerCase().includes(u)))
+    return match || ''
+  }
+
+  // Export function that can be called with specific leads or defaults to filtered leads
+  const exportLeads = (leadsToExport: LocalLead[], filename = 'leads_export.csv') => {
+    if (leadsToExport.length === 0) return
+
+    // Get original column order from the first lead's original_data
+    const firstLeadWithData = leadsToExport.find((lead) => lead.original_data)
+    const originalColumns: string[] = firstLeadWithData?.original_data
+      ? Object.keys(firstLeadWithData.original_data)
+      : []
+
+    // Also collect any additional columns from other leads (in case of mixed imports)
+    const allOriginalKeys = new Set<string>(originalColumns)
+    leadsToExport.forEach((lead) => {
+      if (lead.original_data) {
+        Object.keys(lead.original_data).forEach((key) => allOriginalKeys.add(key))
+      }
+    })
+    // Add any extra keys not in the first lead's data (preserving order, extras at end)
+    allOriginalKeys.forEach((key) => {
+      if (!originalColumns.includes(key)) {
+        originalColumns.push(key)
+      }
+    })
+
+    // Enriched field names (clean names, no prefix)
+    const enrichedFieldNames = [
+      'Email',
+      'Phone',
+      'Website',
+      'Facebook',
+      'LinkedIn',
+      'Instagram',
+      'Twitter',
+      'YouTube',
+      'TikTok',
+      'Other_Socials',
+      'Office_Email',
+      'Office_Phone',
+      'Address',
+      'Enrichment_Status',
+    ]
+
+    // Only add enriched fields that don't already exist in original columns (case-insensitive check)
+    const lowerOriginalColumns = originalColumns.map(c => c.toLowerCase())
+    const newFields = enrichedFieldNames.filter(f => !lowerOriginalColumns.includes(f.toLowerCase()))
+    const headers = [...originalColumns, ...newFields]
+
+    // Build rows preserving original data and adding/updating enriched data
+    const rows = leadsToExport.map((lead) => {
+      const row: string[] = []
+      const enrichData = (lead.enrichment_data || {}) as Record<string, unknown>
+
+      // Collect all socials
+      const allSocials: string[] = []
+      if (enrichData.facebookUrl) allSocials.push(enrichData.facebookUrl as string)
+      if (enrichData.socials && Array.isArray(enrichData.socials)) {
+        allSocials.push(...(enrichData.socials as string[]))
+      }
+      if (lead.linkedin_url) allSocials.push(lead.linkedin_url)
+      const uniqueSocials = [...new Set(allSocials)]
+
+      // Extract each platform
+      const facebook = extractSocialByPlatform(uniqueSocials, 'facebook') || (enrichData.facebookUrl as string) || ''
+      const linkedin = extractSocialByPlatform(uniqueSocials, 'linkedin') || lead.linkedin_url || ''
+      const instagram = extractSocialByPlatform(uniqueSocials, 'instagram')
+      const twitter = extractSocialByPlatform(uniqueSocials, 'twitter')
+      const youtube = extractSocialByPlatform(uniqueSocials, 'youtube')
+      const tiktok = extractSocialByPlatform(uniqueSocials, 'tiktok')
+      const knownPlatforms = ['facebook.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com', 'youtube.com', 'tiktok.com']
+      const otherSocials = uniqueSocials.filter(s => !knownPlatforms.some(p => s.toLowerCase().includes(p)))
+
+      // Format phones in US format
+      const enrichedPhone = formatUSPhone((enrichData.phones as string[])?.[0] || lead.phone)
+      const officePhone = formatUSPhone(enrichData.officePhone as string)
+
+      // Get address - prefer enriched, fallback to lead fields
+      const enrichedAddresses = (enrichData.addresses as string[]) || []
+      let address = ''
+      if (enrichedAddresses.length > 0) {
+        address = enrichedAddresses[0].replace(/\s+/g, ' ').trim()
+      } else if (lead.address || lead.city || lead.state || lead.postal_code) {
+        const parts: string[] = []
+        if (lead.address) parts.push(lead.address)
+        if (lead.city) parts.push(lead.city)
+        if (lead.state && lead.postal_code) {
+          parts.push(`${lead.state} ${lead.postal_code}`)
+        } else if (lead.state) {
+          parts.push(lead.state)
+        } else if (lead.postal_code) {
+          parts.push(lead.postal_code)
+        }
+        address = parts.join(', ')
+      }
+
+      // Map of enriched field values
+      const enrichedValues: Record<string, string> = {
+        email: (enrichData.emails as Array<{email: string}>)?.[0]?.email || lead.email || '',
+        phone: enrichedPhone,
+        website: (enrichData.url as string) || lead.website || '',
+        facebook: facebook,
+        linkedin: linkedin,
+        instagram: instagram,
+        twitter: twitter,
+        youtube: youtube,
+        tiktok: tiktok,
+        other_socials: otherSocials.join('; '),
+        office_email: (enrichData.officeEmail as string) || '',
+        office_phone: officePhone,
+        address: address,
+        enrichment_status: lead.enrichment_status,
+      }
+
+      // Add original data columns - if column matches an enriched field, use enriched value
+      originalColumns.forEach((key) => {
+        const lowerKey = key.toLowerCase()
+        if (enrichedValues[lowerKey] !== undefined) {
+          // Use enriched value for this column
+          row.push(enrichedValues[lowerKey])
+        } else {
+          const value = lead.original_data?.[key]
+          row.push(value !== undefined && value !== null ? String(value) : '')
+        }
+      })
+
+      // Add new enriched fields that weren't in original columns
+      newFields.forEach((field) => {
+        const lowerField = field.toLowerCase()
+        row.push(enrichedValues[lowerField] || '')
+      })
+
+      return row
+    })
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const handleEnrichSelected = async () => {
     if (selectedLeadIds.length === 0) return
 
+    const isBulkEnrichment = selectedLeadIds.length >= AUTO_EXPORT_THRESHOLD
     setIsEnriching(true)
     setEnrichmentProgress({ current: 0, total: selectedLeadIds.length })
 
@@ -154,6 +340,15 @@ export default function LeadsPage() {
 
     setIsEnriching(false)
     clearSelection()
+
+    // Auto-export if this was a bulk enrichment
+    if (isBulkEnrichment) {
+      // Small delay to ensure state is updated before export
+      setTimeout(() => {
+        const timestamp = new Date().toISOString().slice(0, 10)
+        exportLeads(localLeads, `enriched_leads_${timestamp}.csv`)
+      }, 500)
+    }
   }
 
   const handleDeleteSelected = () => {
@@ -171,83 +366,7 @@ export default function LeadsPage() {
   }
 
   const handleExport = () => {
-    if (filteredLeads.length === 0) return
-
-    // Get original column order from the first lead's original_data
-    // Use the first lead that has original_data to preserve column order
-    const firstLeadWithData = filteredLeads.find((lead) => lead.original_data)
-    const originalColumns: string[] = firstLeadWithData?.original_data
-      ? Object.keys(firstLeadWithData.original_data)
-      : []
-
-    // Also collect any additional columns from other leads (in case of mixed imports)
-    const allOriginalKeys = new Set<string>(originalColumns)
-    filteredLeads.forEach((lead) => {
-      if (lead.original_data) {
-        Object.keys(lead.original_data).forEach((key) => allOriginalKeys.add(key))
-      }
-    })
-    // Add any extra keys not in the first lead's data (preserving order, extras at end)
-    allOriginalKeys.forEach((key) => {
-      if (!originalColumns.includes(key)) {
-        originalColumns.push(key)
-      }
-    })
-
-    // Build headers: original CSV columns (in order) + enriched fields
-    const enrichedFields = [
-      '_enriched_email',
-      '_enriched_phone',
-      '_enriched_website',
-      '_enriched_facebook',
-      '_enriched_socials',
-      '_enriched_office_email',
-      '_enriched_office_phone',
-      '_enriched_address',
-      '_enrichment_status',
-    ]
-    const headers = [...originalColumns, ...enrichedFields]
-
-    // Build rows preserving original data and adding enriched data
-    const rows = filteredLeads.map((lead) => {
-      const row: string[] = []
-
-      // Add original data columns in order
-      originalColumns.forEach((key) => {
-        const value = lead.original_data?.[key]
-        row.push(value !== undefined && value !== null ? String(value) : '')
-      })
-
-      // Add enriched fields from enrichment_data
-      const enrichData = (lead.enrichment_data || {}) as Record<string, unknown>
-      row.push((enrichData.emails as Array<{email: string}>)?.[0]?.email || lead.email || '') // _enriched_email
-      row.push((enrichData.phones as string[])?.[0] || lead.phone || '') // _enriched_phone
-      row.push((enrichData.url as string) || lead.website || '') // _enriched_website
-      row.push((enrichData.facebookUrl as string) || '') // _enriched_facebook
-      row.push(((enrichData.socials as string[]) || []).join('; ')) // _enriched_socials
-      row.push((enrichData.officeEmail as string) || '') // _enriched_office_email
-      row.push((enrichData.officePhone as string) || '') // _enriched_office_phone
-      row.push(((enrichData.addresses as string[]) || []).join('; ')) // _enriched_address
-      row.push(lead.enrichment_status) // _enrichment_status
-
-      return row
-    })
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
-      ),
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'leads_export.csv')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    exportLeads(filteredLeads)
   }
 
   return (
