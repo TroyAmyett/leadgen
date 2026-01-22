@@ -104,25 +104,33 @@ export default function LeadsPage() {
     setCurrentPage(1)
   }, [searchQuery, statusFilter, enrichmentFilter])
 
-  // Format phone number to US format (xxx) xxx-xxxx - no country code
+  // Format phone number to US format (###) ###-#### - no country code
+  // Extra digits after the main number are treated as extension with comma pause
   const formatUSPhone = (phone: string | null | undefined): string => {
     if (!phone) return ''
     // Remove all non-digits
-    const digits = phone.replace(/\D/g, '')
-    // Handle 10-digit numbers
-    if (digits.length === 10) {
-      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+    let digits = phone.replace(/\D/g, '')
+
+    // Strip leading 1 (US country code)
+    if (digits.length >= 11 && digits.startsWith('1')) {
+      digits = digits.slice(1)
     }
-    // Handle 11-digit numbers starting with 1 (strip the country code)
-    if (digits.length === 11 && digits.startsWith('1')) {
-      return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+
+    // Need at least 10 digits for a valid US number
+    if (digits.length < 10) {
+      return phone // Return original if too short
     }
-    // Handle 12-digit numbers starting with 01 (some formats include leading 0)
-    if (digits.length === 12 && digits.startsWith('01')) {
-      return `(${digits.slice(2, 5)}) ${digits.slice(5, 8)}-${digits.slice(8)}`
+
+    // Format main number
+    const main = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+
+    // Any digits beyond 10 are the extension
+    if (digits.length > 10) {
+      const ext = digits.slice(10)
+      return `${main},${ext}`
     }
-    // Return original if doesn't match expected format
-    return phone
+
+    return main
   }
 
   // Extract social URL by platform
