@@ -68,6 +68,7 @@ export default function LeadsPage() {
   const router = useRouter()
   const {
     localLeads,
+    importedFileName,
     selectedLeadIds,
     searchQuery,
     statusFilter,
@@ -159,7 +160,16 @@ export default function LeadsPage() {
       }
     })
 
+    // Detect address field patterns in original CSV
+    const lowerOriginalColumns = originalColumns.map(c => c.toLowerCase())
+    const hasAddress1 = lowerOriginalColumns.some(c => c === 'address1' || c === 'address 1')
+    const hasAddress2 = lowerOriginalColumns.some(c => c === 'address2' || c === 'address 2')
+    const hasStreet1 = lowerOriginalColumns.some(c => c === 'street1' || c === 'street 1')
+    const hasStreet2 = lowerOriginalColumns.some(c => c === 'street2' || c === 'street 2')
+    const hasSplitAddress = (hasAddress1 && hasAddress2) || (hasStreet1 && hasStreet2)
+
     // Enriched field names (clean names, no prefix)
+    // Use Street if no split address fields, otherwise we'll populate Address1/2 or Street1/2
     const enrichedFieldNames = [
       'Email',
       'Phone',
@@ -173,13 +183,15 @@ export default function LeadsPage() {
       'Other_Socials',
       'Office_Email',
       'Office_Phone',
-      'Address',
+      ...(hasSplitAddress ? [] : ['Street']),
+      'City',
+      'State',
+      'Postal_Code',
       'Enrichment_Status',
     ]
 
     // Only add enriched fields that don't already exist in original columns (case-insensitive check)
-    const lowerOriginalColumns = originalColumns.map(c => c.toLowerCase())
-    const newFields = enrichedFieldNames.filter(f => !lowerOriginalColumns.includes(f.toLowerCase()))
+    const newFields = enrichedFieldNames.filter(f => !lowerOriginalColumns.includes(f.toLowerCase().replace('_', ' ')) && !lowerOriginalColumns.includes(f.toLowerCase()))
     const headers = [...originalColumns, ...newFields]
 
     // Build rows preserving original data and adding/updating enriched data
@@ -210,24 +222,38 @@ export default function LeadsPage() {
       const enrichedPhone = formatUSPhone((enrichData.phones as string[])?.[0] || lead.phone)
       const officePhone = formatUSPhone(enrichData.officePhone as string)
 
-      // Get address - prefer enriched, fallback to lead fields
+      // Get address components - prefer enriched, fallback to lead fields
       const enrichedAddresses = (enrichData.addresses as string[]) || []
-      let address = ''
+      let street1 = ''
+      let street2 = ''
+      let city = ''
+      let state = ''
+      let postalCode = ''
+
       if (enrichedAddresses.length > 0) {
-        address = enrichedAddresses[0].replace(/\s+/g, ' ').trim()
-      } else if (lead.address || lead.city || lead.state || lead.postal_code) {
-        const parts: string[] = []
-        if (lead.address) parts.push(lead.address)
-        if (lead.city) parts.push(lead.city)
-        if (lead.state && lead.postal_code) {
-          parts.push(`${lead.state} ${lead.postal_code}`)
-        } else if (lead.state) {
-          parts.push(lead.state)
-        } else if (lead.postal_code) {
-          parts.push(lead.postal_code)
+        // Parse enriched address - typically format: "123 Main St, City, ST 12345"
+        const fullAddress = enrichedAddresses[0].replace(/\s+/g, ' ').trim()
+        // Try to parse into components
+        const addressMatch = fullAddress.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
+        if (addressMatch) {
+          street1 = addressMatch[1].trim()
+          city = addressMatch[2].trim()
+          state = addressMatch[3].trim().toUpperCase()
+          postalCode = addressMatch[4].trim()
+        } else {
+          // Fallback: use whole address as street
+          street1 = fullAddress
         }
-        address = parts.join(', ')
+      } else {
+        // Use lead fields
+        street1 = lead.address || ''
+        city = lead.city || ''
+        state = lead.state || ''
+        postalCode = lead.postal_code || ''
       }
+
+      // Combined street for non-split address CSV
+      const combinedStreet = [street1, street2].filter(Boolean).join(' ').trim()
 
       // Map of enriched field values
       const enrichedValues: Record<string, string> = {
@@ -243,7 +269,23 @@ export default function LeadsPage() {
         other_socials: otherSocials.join('; '),
         office_email: (enrichData.officeEmail as string) || '',
         office_phone: officePhone,
-        address: address,
+        // Address fields - support various naming conventions
+        street: combinedStreet || street1,
+        address1: street1,
+        'address 1': street1,
+        address2: street2,
+        'address 2': street2,
+        street1: street1,
+        'street 1': street1,
+        street2: street2,
+        'street 2': street2,
+        city: city,
+        state: state,
+        postal_code: postalCode,
+        postalcode: postalCode,
+        zip: postalCode,
+        zipcode: postalCode,
+        'zip code': postalCode,
         enrichment_status: lead.enrichment_status,
       }
 
@@ -345,8 +387,8 @@ export default function LeadsPage() {
     if (isBulkEnrichment) {
       // Small delay to ensure state is updated before export
       setTimeout(() => {
-        const timestamp = new Date().toISOString().slice(0, 10)
-        exportLeads(localLeads, `enriched_leads_${timestamp}.csv`)
+        const baseName = importedFileName || 'leads'
+        exportLeads(localLeads, `${baseName}-enriched.csv`)
       }, 500)
     }
   }
@@ -366,7 +408,8 @@ export default function LeadsPage() {
   }
 
   const handleExport = () => {
-    exportLeads(filteredLeads)
+    const baseName = importedFileName || 'leads'
+    exportLeads(filteredLeads, `${baseName}-enriched.csv`)
   }
 
   return (

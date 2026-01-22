@@ -216,8 +216,9 @@ export default function ImportPage() {
         }
       }
 
-      // Store leads in the zustand store
-      importLeads(mappedLeads)
+      // Store leads in the zustand store with the original filename
+      const originalFileName = file?.name?.replace(/\.csv$/i, '') || 'leads'
+      importLeads(mappedLeads, originalFileName)
 
       setImportResult({
         imported: mappedLeads.length,

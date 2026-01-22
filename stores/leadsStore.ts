@@ -27,6 +27,7 @@ export interface LocalLead {
 interface LeadsState {
   leads: Lead[]
   localLeads: LocalLead[]
+  importedFileName: string | null
   loading: boolean
   error: string | null
   selectedLeadIds: string[]
@@ -40,7 +41,7 @@ interface LeadsState {
   updateLead: (id: string, updates: LeadUpdate) => Promise<boolean>
   deleteLead: (id: string, userId: string) => Promise<boolean>
   bulkDeleteLeads: (ids: string[], userId: string) => Promise<boolean>
-  importLeads: (leads: LocalLead[]) => void
+  importLeads: (leads: LocalLead[], fileName?: string) => void
   updateLocalLead: (id: string, updates: Partial<LocalLead>) => void
   clearLocalLeads: () => void
   toggleLeadSelection: (id: string) => void
@@ -55,6 +56,7 @@ interface LeadsState {
 export const useLeadsStore = create<LeadsState>((set, get) => ({
   leads: [],
   localLeads: [],
+  importedFileName: null,
   loading: false,
   error: null,
   selectedLeadIds: [],
@@ -256,9 +258,10 @@ export const useLeadsStore = create<LeadsState>((set, get) => ({
     set({ error: null })
   },
 
-  importLeads: (leads: LocalLead[]) => {
+  importLeads: (leads: LocalLead[], fileName?: string) => {
     set((state) => ({
       localLeads: [...leads, ...state.localLeads],
+      importedFileName: fileName || state.importedFileName,
     }))
   },
 
@@ -271,7 +274,7 @@ export const useLeadsStore = create<LeadsState>((set, get) => ({
   },
 
   clearLocalLeads: () => {
-    set({ localLeads: [], selectedLeadIds: [] })
+    set({ localLeads: [], selectedLeadIds: [], importedFileName: null })
   },
 }))
 
