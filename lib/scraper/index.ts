@@ -6,6 +6,184 @@ import type { AnyNode } from 'domhandler'
 export const PHONE_REGEX = /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g
 export const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}(?![a-zA-Z0-9])/g
 
+// Words that cannot be first names - common words, pronouns, verbs that appear after titles like "Pastor"
+const INVALID_FIRST_NAMES = new Set([
+  // Common words from user's list
+  'pastor', 'our', 'and', 'on', 'join', 'students', 'goals', 'what', 'in', 'at',
+  'of', 'to', 'leadership', 'teaches', 'assisting', 'awaiting', 'email', 'as',
+  'where', 'events', 'newsletter', 'home', 'lives', 'during', 'facebook', 'vision',
+  'meets', 'visit', 'orientation', 'god', 'news', 'because', 'learn', 'helped',
+  'or', 'mission',
+  // Pronouns (all forms)
+  'i', 'me', 'my', 'mine', 'myself', 'you', 'your', 'yours', 'yourself', 'yourselves',
+  'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself',
+  'we', 'us', 'our', 'ours', 'ourselves', 'they', 'them', 'their', 'theirs', 'themselves',
+  'who', 'whom', 'whose', 'which', 'what', 'this', 'that', 'these', 'those',
+  'anyone', 'everyone', 'someone', 'no one', 'nobody', 'anybody', 'everybody', 'somebody',
+  'anything', 'everything', 'something', 'nothing',
+  // Common verbs (conjugated forms)
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+  'have', 'has', 'had', 'having',
+  'do', 'does', 'did', 'doing', 'done',
+  'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+  'need', 'dare', 'ought', 'used',
+  'get', 'gets', 'got', 'getting', 'gotten',
+  'go', 'goes', 'went', 'going', 'gone',
+  'come', 'comes', 'came', 'coming',
+  'make', 'makes', 'made', 'making',
+  'take', 'takes', 'took', 'taking', 'taken',
+  'see', 'sees', 'saw', 'seeing', 'seen',
+  'know', 'knows', 'knew', 'knowing', 'known',
+  'think', 'thinks', 'thought', 'thinking',
+  'give', 'gives', 'gave', 'giving', 'given',
+  'find', 'finds', 'found', 'finding',
+  'tell', 'tells', 'told', 'telling',
+  'say', 'says', 'said', 'saying',
+  'ask', 'asks', 'asked', 'asking',
+  'use', 'uses', 'used', 'using',
+  'try', 'tries', 'tried', 'trying',
+  'leave', 'leaves', 'left', 'leaving',
+  'call', 'calls', 'called', 'calling',
+  'keep', 'keeps', 'kept', 'keeping',
+  'let', 'lets', 'letting',
+  'begin', 'begins', 'began', 'beginning', 'begun',
+  'seem', 'seems', 'seemed', 'seeming',
+  'help', 'helps', 'helped', 'helping',
+  'show', 'shows', 'showed', 'showing', 'shown',
+  'hear', 'hears', 'heard', 'hearing',
+  'play', 'plays', 'played', 'playing',
+  'run', 'runs', 'ran', 'running',
+  'move', 'moves', 'moved', 'moving',
+  'live', 'lived', 'living',
+  'believe', 'believes', 'believed', 'believing',
+  'hold', 'holds', 'held', 'holding',
+  'bring', 'brings', 'brought', 'bringing',
+  'happen', 'happens', 'happened', 'happening',
+  'write', 'writes', 'wrote', 'writing', 'written',
+  'provide', 'provides', 'provided', 'providing',
+  'sit', 'sits', 'sat', 'sitting',
+  'stand', 'stands', 'stood', 'standing',
+  'lose', 'loses', 'lost', 'losing',
+  'pay', 'pays', 'paid', 'paying',
+  'meet', 'meets', 'met', 'meeting',
+  'include', 'includes', 'included', 'including',
+  'continue', 'continues', 'continued', 'continuing',
+  'set', 'sets', 'setting',
+  'learn', 'learns', 'learned', 'learning',
+  'change', 'changes', 'changed', 'changing',
+  'lead', 'leads', 'led', 'leading',
+  'understand', 'understands', 'understood', 'understanding',
+  'watch', 'watches', 'watched', 'watching',
+  'follow', 'follows', 'followed', 'following',
+  'stop', 'stops', 'stopped', 'stopping',
+  'create', 'creates', 'created', 'creating',
+  'speak', 'speaks', 'spoke', 'speaking', 'spoken',
+  'read', 'reads', 'reading',
+  'spend', 'spends', 'spent', 'spending',
+  'grow', 'grows', 'grew', 'growing', 'grown',
+  'open', 'opens', 'opened', 'opening',
+  'walk', 'walks', 'walked', 'walking',
+  'win', 'wins', 'won', 'winning',
+  'offer', 'offers', 'offered', 'offering',
+  'remember', 'remembers', 'remembered', 'remembering',
+  'love', 'loves', 'loved', 'loving',
+  'consider', 'considers', 'considered', 'considering',
+  'appear', 'appears', 'appeared', 'appearing',
+  'buy', 'buys', 'bought', 'buying',
+  'wait', 'waits', 'waited', 'waiting',
+  'serve', 'serves', 'served', 'serving',
+  'die', 'dies', 'died', 'dying',
+  'send', 'sends', 'sent', 'sending',
+  'expect', 'expects', 'expected', 'expecting',
+  'build', 'builds', 'built', 'building',
+  'stay', 'stays', 'stayed', 'staying',
+  'fall', 'falls', 'fell', 'falling', 'fallen',
+  'cut', 'cuts', 'cutting',
+  'reach', 'reaches', 'reached', 'reaching',
+  'kill', 'kills', 'killed', 'killing',
+  'remain', 'remains', 'remained', 'remaining',
+  // Articles and prepositions
+  'the', 'a', 'an', 'about', 'above', 'across', 'after', 'against', 'along',
+  'among', 'around', 'before', 'behind', 'below', 'beneath', 'beside', 'between',
+  'beyond', 'but', 'by', 'down', 'during', 'except', 'for', 'from', 'inside',
+  'into', 'near', 'off', 'onto', 'out', 'outside', 'over', 'past', 'since',
+  'through', 'throughout', 'till', 'toward', 'towards', 'under', 'underneath',
+  'until', 'unto', 'up', 'upon', 'with', 'within', 'without',
+  // Conjunctions
+  'and', 'or', 'but', 'nor', 'so', 'yet', 'both', 'either', 'neither',
+  'not', 'only', 'whether', 'while', 'although', 'because', 'if', 'unless',
+  'until', 'when', 'where', 'whereas', 'wherever', 'whether',
+  // Common adjectives/adverbs
+  'all', 'also', 'any', 'back', 'each', 'even', 'every', 'first', 'good',
+  'great', 'here', 'high', 'just', 'last', 'little', 'long', 'many', 'more',
+  'most', 'much', 'new', 'no', 'now', 'old', 'only', 'other', 'own', 'right',
+  'same', 'small', 'some', 'still', 'such', 'then', 'there', 'very', 'well',
+  'again', 'always', 'never', 'often', 'really', 'too', 'yes',
+  // Common nouns that aren't names
+  'group', 'life', 'part', 'people', 'place', 'point', 'thing', 'time', 'way',
+  'work', 'world', 'year', 'day', 'week', 'month',
+  // Church/ministry specific
+  'church', 'ministry', 'service', 'services', 'worship', 'prayer', 'bible',
+  'study', 'class', 'classes', 'sunday', 'monday', 'tuesday', 'wednesday',
+  'thursday', 'friday', 'saturday', 'morning', 'evening', 'night', 'weekly',
+  'monthly', 'annual', 'youth', 'adult', 'children', 'kids', 'men', 'women',
+  'family', 'families', 'community', 'welcome', 'connect',
+  // Website/UI terms
+  'click', 'info', 'information', 'staff', 'team', 'board', 'office',
+  'address', 'phone', 'fax', 'hours', 'contact', 'view', 'download', 'submit',
+  'subscribe', 'register', 'login', 'logout', 'search', 'menu', 'page', 'link',
+])
+
+// Validate that a name is likely a real person's name
+function isValidPersonName(name: string): boolean {
+  if (!name || name.length < 2) return false
+
+  const words = name.trim().split(/\s+/)
+  if (words.length < 2) return false // Need at least first and last name
+
+  const firstName = words[0]
+  const lastName = words[words.length - 1]
+
+  // First name checks
+  // 1. Must start with uppercase letter
+  if (!/^[A-Z]/.test(firstName)) return false
+
+  // 2. Must not be in the blocklist
+  if (INVALID_FIRST_NAMES.has(firstName.toLowerCase())) return false
+
+  // 3. Must be mostly lowercase after first letter (proper capitalization)
+  // Allow for names like "McDonald" but reject "PASTOR" or "AND"
+  if (firstName.length > 1) {
+    const restOfName = firstName.slice(1)
+    const uppercaseCount = (restOfName.match(/[A-Z]/g) || []).length
+    // Allow 1 uppercase for names like "McDonald", but not all caps
+    if (uppercaseCount > 1) return false
+  }
+
+  // Last name checks
+  // 1. Must start with uppercase letter
+  if (!/^[A-Z]/.test(lastName)) return false
+
+  // 2. Must not be in the blocklist
+  if (INVALID_FIRST_NAMES.has(lastName.toLowerCase())) return false
+
+  // 3. Check for proper capitalization
+  if (lastName.length > 1) {
+    const restOfName = lastName.slice(1)
+    const uppercaseCount = (restOfName.match(/[A-Z]/g) || []).length
+    if (uppercaseCount > 1) return false
+  }
+
+  // Check middle names if present
+  for (let i = 1; i < words.length - 1; i++) {
+    const middleName = words[i]
+    if (!/^[A-Z]/.test(middleName)) return false
+    if (INVALID_FIRST_NAMES.has(middleName.toLowerCase())) return false
+  }
+
+  return true
+}
+
 export interface ScrapeResult {
   emails: Array<{ email: string; score: number }>
   phones: string[]
@@ -458,7 +636,7 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
         // Extract the title from the pattern (everything before the capture group)
         const fullMatch = match[0]
         const title = fullMatch.replace(name, '').replace(/[:\-\s]+$/, '').trim()
-        if (name && name.length > 3 && name.split(' ').length >= 2) {
+        if (name && name.length > 3 && name.split(' ').length >= 2 && isValidPersonName(name)) {
           // Avoid duplicates
           if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
             people.push({ name, title: title || undefined })
@@ -473,7 +651,7 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       while ((match = pattern.exec(textContent)) !== null) {
         const name = match[1]?.trim()
         const title = match[2]?.trim()
-        if (name && name.length > 3 && name.split(' ').length >= 2) {
+        if (name && name.length > 3 && name.split(' ').length >= 2 && isValidPersonName(name)) {
           if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
             people.push({ name, title: title || undefined })
           }
@@ -498,9 +676,8 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       }
 
       if (name && name.length > 3 && name.split(' ').length >= 2 && name.length < 50) {
-        // Filter out obvious non-names
-        const isLikelyName = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(name)
-        if (isLikelyName && !people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        // Filter out obvious non-names using validation function
+        if (isValidPersonName(name) && !people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
           people.push({
             name,
             title: title && title.length < 50 ? title : undefined
