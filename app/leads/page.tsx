@@ -137,9 +137,39 @@ export default function LeadsPage() {
     }
   }, [isEnriching, lastEnrichedId, scrollToLead])
 
-  // Format phone number to US format (###) ###-#### - no country code
-  // Extra digits after the main number are treated as extension with comma pause
-  const formatUSPhone = (phone: string | null | undefined): string => {
+  // State abbreviation to full name mapping
+  const stateNames: Record<string, string> = {
+    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+    'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
+    'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
+    'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+    'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi', 'MO': 'Missouri',
+    'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada', 'NH': 'New Hampshire', 'NJ': 'New Jersey',
+    'NM': 'New Mexico', 'NY': 'New York', 'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio',
+    'OK': 'Oklahoma', 'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+    'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
+    'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+    'DC': 'District of Columbia'
+  }
+
+  // Reverse mapping: full name to abbreviation
+  const stateAbbreviations: Record<string, string> = Object.entries(stateNames).reduce((acc, [abbr, name]) => {
+    acc[name.toLowerCase()] = abbr
+    return acc
+  }, {} as Record<string, string>)
+
+  // Detect phone format from a sample phone number
+  // Returns: 'parentheses' for (###) ###-####, 'dashes' for ###-###-####, 'dots' for ###.###.####, 'plain' for ##########
+  const detectPhoneFormat = (phone: string | null | undefined): 'parentheses' | 'dashes' | 'dots' | 'plain' => {
+    if (!phone) return 'parentheses' // default
+    if (phone.includes('(')) return 'parentheses'
+    if (phone.includes('.')) return 'dots'
+    if (phone.includes('-')) return 'dashes'
+    return 'plain'
+  }
+
+  // Format phone number according to detected format
+  const formatPhoneAs = (phone: string | null | undefined, format: 'parentheses' | 'dashes' | 'dots' | 'plain'): string => {
     if (!phone) return ''
     // Remove all non-digits
     let digits = phone.replace(/\D/g, '')
@@ -154,8 +184,21 @@ export default function LeadsPage() {
       return phone // Return original if too short
     }
 
-    // Format main number
-    const main = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+    let main = ''
+    switch (format) {
+      case 'parentheses':
+        main = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+        break
+      case 'dashes':
+        main = `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+        break
+      case 'dots':
+        main = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 10)}`
+        break
+      case 'plain':
+        main = digits.slice(0, 10)
+        break
+    }
 
     // Any digits beyond 10 are the extension
     if (digits.length > 10) {
@@ -164,6 +207,43 @@ export default function LeadsPage() {
     }
 
     return main
+  }
+
+  // Detect state format: 'abbr' for 2-letter, 'full' for full name
+  const detectStateFormat = (state: string | null | undefined): 'abbr' | 'full' => {
+    if (!state) return 'abbr' // default
+    const trimmed = state.trim()
+    if (trimmed.length === 2) return 'abbr'
+    if (trimmed.length > 2) return 'full'
+    return 'abbr'
+  }
+
+  // Format state according to detected format
+  const formatStateAs = (state: string | null | undefined, format: 'abbr' | 'full'): string => {
+    if (!state) return ''
+    const trimmed = state.trim()
+
+    if (format === 'abbr') {
+      // If already abbreviation, return uppercase
+      if (trimmed.length === 2) return trimmed.toUpperCase()
+      // Convert full name to abbreviation
+      const abbr = stateAbbreviations[trimmed.toLowerCase()]
+      return abbr || trimmed
+    } else {
+      // If already full name, return as-is with proper case
+      if (trimmed.length > 2) {
+        // Proper case the name
+        return trimmed.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+      }
+      // Convert abbreviation to full name
+      const fullName = stateNames[trimmed.toUpperCase()]
+      return fullName || trimmed
+    }
+  }
+
+  // Legacy function for backwards compatibility
+  const formatUSPhone = (phone: string | null | undefined): string => {
+    return formatPhoneAs(phone, 'parentheses')
   }
 
   // Extract social URL by platform
@@ -212,6 +292,20 @@ export default function LeadsPage() {
     const hasStreet1 = lowerOriginalColumns.some(c => c === 'street1' || c === 'street 1')
     const hasStreet2 = lowerOriginalColumns.some(c => c === 'street2' || c === 'street 2')
     const hasSplitAddress = (hasAddress1 && hasAddress2) || (hasStreet1 && hasStreet2)
+
+    // Find the exact address field names used in the original CSV
+    const address1FieldName = originalColumns.find(c => c.toLowerCase() === 'address1' || c.toLowerCase() === 'address 1') || 'Address 1'
+    const address2FieldName = originalColumns.find(c => c.toLowerCase() === 'address2' || c.toLowerCase() === 'address 2') || 'Address 2'
+
+    // Detect phone format from first lead with a phone number
+    const firstLeadWithPhone = leadsToExport.find(lead => lead.phone || lead.original_data?.Phone || lead.original_data?.phone)
+    const originalPhone = firstLeadWithPhone?.original_data?.Phone || firstLeadWithPhone?.original_data?.phone || firstLeadWithPhone?.phone
+    const detectedPhoneFormat = detectPhoneFormat(originalPhone as string)
+
+    // Detect state format from first lead with a state
+    const firstLeadWithState = leadsToExport.find(lead => lead.state || lead.original_data?.State || lead.original_data?.state)
+    const originalState = firstLeadWithState?.original_data?.State || firstLeadWithState?.original_data?.state || firstLeadWithState?.state
+    const detectedStateFormat = detectStateFormat(originalState as string)
 
     // Enriched field names (clean names, no prefix)
     // Use Street if no split address fields, otherwise we'll populate Address1/2 or Street1/2
@@ -270,9 +364,9 @@ export default function LeadsPage() {
       const knownPlatforms = ['facebook.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com', 'youtube.com', 'tiktok.com']
       const otherSocials = uniqueSocials.filter(s => !knownPlatforms.some(p => s.toLowerCase().includes(p)))
 
-      // Format phones in US format
-      const enrichedPhone = formatUSPhone((enrichData.phones as string[])?.[0] || lead.phone)
-      const officePhone = formatUSPhone(enrichData.officePhone as string)
+      // Format phones using detected format from input data
+      const enrichedPhone = formatPhoneAs((enrichData.phones as string[])?.[0] || lead.phone, detectedPhoneFormat)
+      const officePhone = formatPhoneAs(enrichData.officePhone as string, detectedPhoneFormat)
 
       // Get original address from lead fields
       const originalStreet = lead.address || ''
@@ -456,7 +550,7 @@ export default function LeadsPage() {
         street2: street2,
         'street 2': street2,
         city: city,
-        state: state,
+        state: formatStateAs(state, detectedStateFormat),
         postal_code: postalCode,
         postalcode: postalCode,
         zip: postalCode,
@@ -465,7 +559,7 @@ export default function LeadsPage() {
         // Alternate address (only populated if different from original)
         alt_street: altStreet,
         alt_city: altCity,
-        alt_state: altState,
+        alt_state: altState ? formatStateAs(altState, detectedStateFormat) : '',
         alt_postal_code: altPostalCode,
         // Name and title - support various naming conventions
         first_name: firstName,
