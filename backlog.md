@@ -108,6 +108,58 @@ AI-powered personalized email opener generation based on scraped data.
 
 ---
 
+## Use Case 3: B2B vs B2C Scraping Modes
+
+**Priority:** High | **Status:** Planned
+
+Different lead types require different data sources and scraping strategies.
+
+### B2C Leads (Current - Churches, Local Businesses)
+- Company website scraping
+- Google Maps / local directories
+- Facebook pages
+- Local news mentions
+- Staff/team pages for contacts
+
+### B2B Leads (New)
+- **LinkedIn Company Pages** - Company size, industry, employee count
+- **LinkedIn Sales Navigator** - Decision makers, job titles
+- **Crunchbase** - Funding, investors, company stage
+- **TechCrunch / Tech News** - Recent funding, product launches
+- **AngelList** - Startup data, team info
+- **Glassdoor** - Company size, culture signals
+- **ZoomInfo** (paid) - Contact database
+- **Apollo.io** - Email finder + company data
+- **PitchBook** - Financial/investment data
+
+### B2B Data Points to Capture
+- Company size (employees)
+- Industry/vertical
+- Tech stack (BuiltWith, Wappalyzer)
+- Funding stage/amount
+- Decision maker contacts (C-suite, VPs)
+- Recent news/press releases
+- Job postings (hiring signals)
+- Revenue estimates
+
+### Implementation Approach
+- Add "Lead Type" selector on import: B2B / B2C / Auto-detect
+- Different scraping pipelines per type
+- B2B: Prioritize LinkedIn, Crunchbase, tech news
+- B2C: Prioritize website, Google Maps, local directories
+- Auto-detect based on company signals (funding mentions, tech stack, etc.)
+
+### Free B2B Data Sources
+- **LinkedIn (public profiles)** - Limited without API
+- **Crunchbase (free tier)** - Basic company data
+- **GitHub** - For tech companies (repos, team)
+- **Product Hunt** - Startup launches
+- **Y Combinator directory** - YC companies
+- **Google News** - Press mentions
+- **SEC EDGAR** - Public company filings (free)
+
+---
+
 ### Contact & Enrichment
 
 - [ ] **Extended Social Scraping**: Deep scrape LinkedIn, Instagram, and Twitter for matching contact profiles.
