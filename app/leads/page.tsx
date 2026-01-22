@@ -327,56 +327,85 @@ export default function LeadsPage() {
     document.body.removeChild(link)
   }
 
+  // Enrich a single lead - returns the result for batch processing
+  const enrichSingleLead = async (lead: LocalLead): Promise<{ id: string; success: boolean }> => {
+    try {
+      const response = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: lead.website || '',
+          firstName: lead.first_name,
+          lastName: lead.last_name,
+          company: lead.company,
+          city: lead.city,
+          state: lead.state,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        updateLocalLead(lead.id, {
+          enrichment_status: 'enriched',
+          enrichment_data: data,
+          email: data.emails?.[0]?.email || lead.email,
+          phone: data.phones?.[0] || lead.phone,
+          website: data.url || lead.website,
+        })
+        return { id: lead.id, success: true }
+      } else {
+        updateLocalLead(lead.id, { enrichment_status: 'failed' })
+        return { id: lead.id, success: false }
+      }
+    } catch (err) {
+      console.error('Enrichment error:', err)
+      updateLocalLead(lead.id, { enrichment_status: 'failed' })
+      return { id: lead.id, success: false }
+    }
+  }
+
   const handleEnrichSelected = async () => {
     if (selectedLeadIds.length === 0) return
 
     const isBulkEnrichment = selectedLeadIds.length >= AUTO_EXPORT_THRESHOLD
     setIsEnriching(true)
-    setEnrichmentProgress({ current: 0, total: selectedLeadIds.length })
 
-    // Get leads to enrich
-    const leadsToEnrich = localLeads.filter((l) => selectedLeadIds.includes(l.id))
+    // Get leads to enrich - skip already enriched ones
+    const leadsToEnrich = localLeads.filter(
+      (l) => selectedLeadIds.includes(l.id) && l.enrichment_status !== 'enriched'
+    )
 
-    for (let i = 0; i < leadsToEnrich.length; i++) {
-      const lead = leadsToEnrich[i]
-      setEnrichmentProgress({ current: i + 1, total: leadsToEnrich.length })
+    // If all selected leads are already enriched, just exit
+    if (leadsToEnrich.length === 0) {
+      setIsEnriching(false)
+      clearSelection()
+      return
+    }
 
-      try {
-        // Call the scrape API to enrich the lead
-        const response = await fetch('/api/scrape', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: lead.website || '',
-            firstName: lead.first_name,
-            lastName: lead.last_name,
-            company: lead.company,
-            city: lead.city,
-            state: lead.state,
-          }),
-        })
+    setEnrichmentProgress({ current: 0, total: leadsToEnrich.length })
 
-        if (response.ok) {
-          const data = await response.json()
-          // Update the lead with enriched data
-          updateLocalLead(lead.id, {
-            enrichment_status: 'enriched',
-            enrichment_data: data,
-            email: data.emails?.[0]?.email || lead.email,
-            phone: data.phones?.[0] || lead.phone,
-            website: data.url || lead.website,
-          })
-        } else {
-          updateLocalLead(lead.id, { enrichment_status: 'failed' })
-        }
-      } catch (err) {
-        console.error('Enrichment error:', err)
-        updateLocalLead(lead.id, { enrichment_status: 'failed' })
-      }
+    // Process in parallel batches of 4 for speed
+    const BATCH_SIZE = 4
+    const BATCH_DELAY = 500 // ms between batches (much shorter than per-lead delay)
+    let completed = 0
 
-      // Add a small delay between requests to avoid rate limiting
-      if (i < leadsToEnrich.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000))
+    for (let i = 0; i < leadsToEnrich.length; i += BATCH_SIZE) {
+      const batch = leadsToEnrich.slice(i, i + BATCH_SIZE)
+
+      // Mark batch as "enriching" for UI feedback
+      batch.forEach(lead => {
+        updateLocalLead(lead.id, { enrichment_status: 'enriching' })
+      })
+
+      // Process batch in parallel
+      const results = await Promise.all(batch.map(lead => enrichSingleLead(lead)))
+
+      completed += results.length
+      setEnrichmentProgress({ current: completed, total: leadsToEnrich.length })
+
+      // Small delay between batches to avoid overwhelming the server
+      if (i + BATCH_SIZE < leadsToEnrich.length) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY))
       }
     }
 

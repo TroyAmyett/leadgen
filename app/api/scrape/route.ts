@@ -112,8 +112,12 @@ export async function POST(request: NextRequest) {
       providedFb = scrapedFb
     }
 
-    // Phase 2: Deep scrape contact page if needed
-    if ((emails.length === 0 || phones.length === 0) && internalLinks.length > 0) {
+    // Early exit check - if we have email AND phone AND address, skip deeper phases
+    const hasBasicInfo = emails.length > 0 && phones.length > 0
+    const hasAddress = addresses.length > 0
+
+    // Phase 2: Deep scrape contact page if needed (skip if we have basic info)
+    if (!hasBasicInfo && internalLinks.length > 0) {
       const contactUrl =
         internalLinks.find((l) => l.toLowerCase().includes('contact')) || internalLinks[0]
       console.log(`Phase 2: Deeper Scrape -> ${contactUrl}`)
@@ -130,10 +134,13 @@ export async function POST(request: NextRequest) {
         const deeperFb = (deeper.socials || []).find((s) => s.includes('facebook.com'))
         if (deeperFb && !providedFb) providedFb = deeperFb
       }
+    } else if (hasBasicInfo) {
+      console.log('Phase 2: Skipped (already have email and phone)')
     }
 
-    // Phase 3: Snippet fallback search
-    if (emails.length === 0 || phones.length === 0) {
+    // Phase 3: Snippet fallback search (only if still missing critical info)
+    const stillMissingInfo = emails.length === 0 || phones.length === 0
+    if (stillMissingInfo) {
       console.log('Contact info still missing. Performing snippet fallback search...')
       const location = city ? (state ? `${city} ${state}` : city) : ''
       const query = company
@@ -154,6 +161,8 @@ export async function POST(request: NextRequest) {
           phones = [...phones, ...snippetPhones]
         })
       }
+    } else {
+      console.log('Phase 3: Skipped (have required contact info)')
     }
 
     // Process and score results
