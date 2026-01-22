@@ -630,12 +630,35 @@ export default function LeadsPage() {
 
       if (response.ok) {
         const data = await response.json()
+
+        // Extract name and title from people data if lead doesn't already have them
+        let enrichedFirstName = lead.first_name
+        let enrichedLastName = lead.last_name
+        let enrichedTitle = lead.title
+
+        if (data.people && data.people.length > 0) {
+          const firstPerson = data.people[0]
+          if (firstPerson.name && (!lead.first_name || !lead.last_name)) {
+            const nameParts = firstPerson.name.trim().split(/\s+/)
+            if (nameParts.length >= 2) {
+              enrichedFirstName = enrichedFirstName || nameParts[0]
+              enrichedLastName = enrichedLastName || nameParts.slice(1).join(' ')
+            }
+          }
+          if (firstPerson.title && !lead.title) {
+            enrichedTitle = firstPerson.title
+          }
+        }
+
         updateLocalLead(lead.id, {
           enrichment_status: 'enriched',
           enrichment_data: data,
           email: data.emails?.[0]?.email || lead.email,
           phone: data.phones?.[0] || lead.phone,
           website: data.url || lead.website,
+          first_name: enrichedFirstName,
+          last_name: enrichedLastName,
+          title: enrichedTitle,
         })
         // Track last enriched for scroll effect
         setLastEnrichedId(lead.id)
