@@ -104,7 +104,7 @@ export default function LeadsPage() {
     setCurrentPage(1)
   }, [searchQuery, statusFilter, enrichmentFilter])
 
-  // Format phone number to US format (xxx) xxx-xxxx
+  // Format phone number to US format (xxx) xxx-xxxx - no country code
   const formatUSPhone = (phone: string | null | undefined): string => {
     if (!phone) return ''
     // Remove all non-digits
@@ -113,9 +113,13 @@ export default function LeadsPage() {
     if (digits.length === 10) {
       return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
     }
-    // Handle 11-digit numbers starting with 1
+    // Handle 11-digit numbers starting with 1 (strip the country code)
     if (digits.length === 11 && digits.startsWith('1')) {
       return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+    }
+    // Handle 12-digit numbers starting with 01 (some formats include leading 0)
+    if (digits.length === 12 && digits.startsWith('01')) {
+      return `(${digits.slice(2, 5)}) ${digits.slice(5, 8)}-${digits.slice(8)}`
     }
     // Return original if doesn't match expected format
     return phone
