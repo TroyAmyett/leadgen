@@ -187,6 +187,10 @@ export default function LeadsPage() {
       'City',
       'State',
       'Postal_Code',
+      'Alt_Street',
+      'Alt_City',
+      'Alt_State',
+      'Alt_Postal_Code',
       'Enrichment_Status',
     ]
 
@@ -222,38 +226,85 @@ export default function LeadsPage() {
       const enrichedPhone = formatUSPhone((enrichData.phones as string[])?.[0] || lead.phone)
       const officePhone = formatUSPhone(enrichData.officePhone as string)
 
-      // Get address components - prefer enriched, fallback to lead fields
-      const enrichedAddresses = (enrichData.addresses as string[]) || []
-      let street1 = ''
-      let street2 = ''
-      let city = ''
-      let state = ''
-      let postalCode = ''
+      // Get original address from lead fields
+      const originalStreet = lead.address || ''
+      const originalCity = lead.city || ''
+      const originalState = lead.state || ''
+      const originalPostalCode = lead.postal_code || ''
 
-      if (enrichedAddresses.length > 0) {
-        // Parse enriched address - typically format: "123 Main St, City, ST 12345"
-        const fullAddress = enrichedAddresses[0].replace(/\s+/g, ' ').trim()
-        // Try to parse into components
-        const addressMatch = fullAddress.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
-        if (addressMatch) {
-          street1 = addressMatch[1].trim()
-          city = addressMatch[2].trim()
-          state = addressMatch[3].trim().toUpperCase()
-          postalCode = addressMatch[4].trim()
-        } else {
-          // Fallback: use whole address as street
-          street1 = fullAddress
+      // Parse enriched addresses
+      const enrichedAddresses = (enrichData.addresses as string[]) || []
+
+      // Helper to parse address string into components
+      const parseAddress = (fullAddress: string) => {
+        const cleaned = fullAddress.replace(/\s+/g, ' ').trim()
+        // Try format: "123 Main St, City, ST 12345"
+        const match = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
+        if (match) {
+          return {
+            street: match[1].trim(),
+            city: match[2].trim(),
+            state: match[3].trim().toUpperCase(),
+            postalCode: match[4].trim()
+          }
         }
-      } else {
-        // Use lead fields
-        street1 = lead.address || ''
-        city = lead.city || ''
-        state = lead.state || ''
-        postalCode = lead.postal_code || ''
+        // Try format: "123 Main St, City, ST" (no zip)
+        const match2 = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})$/i)
+        if (match2) {
+          return {
+            street: match2[1].trim(),
+            city: match2[2].trim(),
+            state: match2[3].trim().toUpperCase(),
+            postalCode: ''
+          }
+        }
+        // Fallback: just street
+        return { street: cleaned, city: '', state: '', postalCode: '' }
       }
 
-      // Combined street for non-split address CSV
-      const combinedStreet = [street1, street2].filter(Boolean).join(' ').trim()
+      // Parse first enriched address if available
+      let enrichedStreet = ''
+      let enrichedCity = ''
+      let enrichedState = ''
+      let enrichedPostalCode = ''
+
+      if (enrichedAddresses.length > 0) {
+        const parsed = parseAddress(enrichedAddresses[0])
+        enrichedStreet = parsed.street
+        enrichedCity = parsed.city
+        enrichedState = parsed.state
+        enrichedPostalCode = parsed.postalCode
+      }
+
+      // Determine if enriched address is different from original
+      const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const originalNormalized = normalizeForCompare(originalStreet + originalCity + originalState)
+      const enrichedNormalized = normalizeForCompare(enrichedStreet + enrichedCity + enrichedState)
+      const addressIsDifferent = enrichedNormalized && originalNormalized && enrichedNormalized !== originalNormalized
+
+      // Final address values: use original if present, otherwise enriched
+      // Only override with enriched if original is empty
+      let street1 = originalStreet || enrichedStreet
+      const street2 = '' // We don't typically get street2 from scraping
+      let city = originalCity || enrichedCity
+      let state = originalState || enrichedState
+      let postalCode = originalPostalCode || enrichedPostalCode
+
+      // Alternate address: only if enriched is different AND original exists
+      let altStreet = ''
+      let altCity = ''
+      let altState = ''
+      let altPostalCode = ''
+
+      if (addressIsDifferent) {
+        altStreet = enrichedStreet
+        altCity = enrichedCity
+        altState = enrichedState
+        altPostalCode = enrichedPostalCode
+      }
+
+      // Combined street for non-split address CSV (just street, NOT city/state/zip)
+      const combinedStreet = street1
 
       // Map of enriched field values
       const enrichedValues: Record<string, string> = {
@@ -269,8 +320,9 @@ export default function LeadsPage() {
         other_socials: otherSocials.join('; '),
         office_email: (enrichData.officeEmail as string) || '',
         office_phone: officePhone,
-        // Address fields - support various naming conventions
-        street: combinedStreet || street1,
+        // Address fields - support various naming conventions (street only, NOT city/state/zip in street)
+        street: combinedStreet,
+        address: street1,
         address1: street1,
         'address 1': street1,
         address2: street2,
@@ -286,6 +338,11 @@ export default function LeadsPage() {
         zip: postalCode,
         zipcode: postalCode,
         'zip code': postalCode,
+        // Alternate address (only populated if different from original)
+        alt_street: altStreet,
+        alt_city: altCity,
+        alt_state: altState,
+        alt_postal_code: altPostalCode,
         enrichment_status: lead.enrichment_status,
       }
 
