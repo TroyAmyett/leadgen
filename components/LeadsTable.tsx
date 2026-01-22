@@ -168,7 +168,7 @@ export function LeadsTable({
                 animate={{
                   opacity: 1,
                   backgroundColor: isLastEnriched
-                    ? 'rgba(16, 185, 129, 0.15)'
+                    ? 'rgba(255, 255, 255, 0.06)'
                     : selectedIds.includes(lead.id)
                       ? 'rgba(139, 92, 246, 0.05)'
                       : 'transparent'
@@ -176,7 +176,7 @@ export function LeadsTable({
                 transition={{
                   backgroundColor: { duration: isLastEnriched ? 0.3 : 0.5 }
                 }}
-                className={`${selectedIds.includes(lead.id) ? 'bg-fl-primary/5' : ''} ${isLastEnriched ? 'ring-1 ring-fl-success/50' : ''}`}
+                className={`${selectedIds.includes(lead.id) ? 'bg-fl-primary/5' : ''}`}
               >
                 <td>
                   <input
