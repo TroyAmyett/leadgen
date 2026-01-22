@@ -416,8 +416,11 @@ export default function LeadsPage() {
     if (isBulkEnrichment) {
       // Small delay to ensure state is updated before export
       setTimeout(() => {
-        const baseName = importedFileName || 'leads'
-        exportLeads(localLeads, `${baseName}-enriched.csv`)
+        // Get fresh state from store - don't use stale closure
+        const freshState = useLeadsStore.getState()
+        const freshLeads = freshState.localLeads
+        const baseName = freshState.importedFileName || 'leads'
+        exportLeads(freshLeads, `${baseName}-enriched.csv`)
       }, 500)
     }
   }

@@ -1,0 +1,16 @@
+{
+  "exclusionPatterns": [
+    "addresshere.com",
+    "example.com",
+    "enteryour",
+    "yoursite.com",
+    "domain.com",
+    "placeholder",
+    "testjunk.com",
+    "pbbn.org",
+    "communications",
+    "superpages",
+    "mylife",
+    "whitepages.com"
+  ]
+}
