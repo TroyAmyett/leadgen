@@ -132,13 +132,47 @@ const INVALID_FIRST_NAMES = new Set([
   'click', 'info', 'information', 'staff', 'team', 'board', 'office',
   'address', 'phone', 'fax', 'hours', 'contact', 'view', 'download', 'submit',
   'subscribe', 'register', 'login', 'logout', 'search', 'menu', 'page', 'link',
+  // Job titles (can't be first or last names)
+  'executive', 'director', 'manager', 'coordinator', 'administrator', 'supervisor',
+  'president', 'founder', 'owner', 'partner', 'principal', 'chairman', 'chairwoman',
+  'ceo', 'cfo', 'cto', 'coo', 'vp', 'svp', 'evp', 'avp',
+  'associate', 'assistant', 'senior', 'junior', 'lead', 'head', 'chief',
+  'analyst', 'specialist', 'consultant', 'advisor', 'agent', 'representative',
+  'engineer', 'developer', 'designer', 'architect', 'scientist', 'researcher',
+  'accountant', 'attorney', 'lawyer', 'paralegal', 'nurse', 'doctor', 'physician',
+  'secretary', 'receptionist', 'clerk', 'intern', 'trainee', 'volunteer',
+  'minister', 'reverend', 'deacon', 'elder', 'bishop', 'priest', 'rabbi', 'imam',
 ])
+
+// Clean encoding artifacts from names (e.g., "JoshuaÂ" -> "Joshua")
+function cleanName(name: string): string {
+  if (!name) return ''
+
+  // Remove common encoding artifacts
+  let clean = name
+    // Remove Â (from NBSP in wrong encoding), Ã, and other Latin-1 artifacts
+    .replace(/[ÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß]/g, '')
+    .replace(/[âãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]/g, '')
+    // Remove smart quotes and other typographic characters that got mangled
+    .replace(/[""''‚„†‡•…‰′″‹›‼‽⁂]/g, '')
+    // Remove zero-width characters and other invisibles
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    // Normalize whitespace (tabs, multiple spaces, etc.)
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return clean
+}
 
 // Validate that a name is likely a real person's name
 function isValidPersonName(name: string): boolean {
   if (!name || name.length < 2) return false
 
-  const words = name.trim().split(/\s+/)
+  // Clean encoding artifacts first
+  const cleanedName = cleanName(name)
+  if (!cleanedName || cleanedName.length < 2) return false
+
+  const words = cleanedName.trim().split(/\s+/)
   if (words.length < 2) return false // Need at least first and last name
 
   const firstName = words[0]
@@ -632,10 +666,11 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
     for (const pattern of titlePatterns) {
       let match
       while ((match = pattern.exec(textContent)) !== null) {
-        const name = match[1]?.trim()
+        const rawName = match[1]?.trim()
+        const name = cleanName(rawName)
         // Extract the title from the pattern (everything before the capture group)
         const fullMatch = match[0]
-        const title = fullMatch.replace(name, '').replace(/[:\-\s]+$/, '').trim()
+        const title = cleanName(fullMatch.replace(rawName, '').replace(/[:\-\s]+$/, '').trim())
         if (name && name.length > 3 && name.split(' ').length >= 2 && isValidPersonName(name)) {
           // Avoid duplicates
           if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
@@ -649,8 +684,8 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
     for (const pattern of reverseTitlePatterns) {
       let match
       while ((match = pattern.exec(textContent)) !== null) {
-        const name = match[1]?.trim()
-        const title = match[2]?.trim()
+        const name = cleanName(match[1]?.trim())
+        const title = cleanName(match[2]?.trim())
         if (name && name.length > 3 && name.split(' ').length >= 2 && isValidPersonName(name)) {
           if (!people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
             people.push({ name, title: title || undefined })
@@ -664,15 +699,15 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       const $el = $(el)
       // Look for name in headings or strong tags
       const nameEl = $el.find('h2, h3, h4, h5, strong, .name, .title, [class*="name"]').first()
-      const name = nameEl.text().trim()
+      const name = cleanName(nameEl.text().trim())
 
       // Look for title/position
       const titleEl = $el.find('.position, .role, .job-title, [class*="position"], [class*="role"], [class*="title"]').first()
-      let title = titleEl.text().trim()
+      let title = cleanName(titleEl.text().trim())
 
       // If title element is same as name element, look elsewhere
       if (title === name) {
-        title = $el.find('p, span').not(nameEl).first().text().trim()
+        title = cleanName($el.find('p, span').not(nameEl).first().text().trim())
       }
 
       if (name && name.length > 3 && name.split(' ').length >= 2 && name.length < 50) {
