@@ -322,11 +322,12 @@ export default function LeadsPage() {
       'Other_Socials',
       'Office_Email',
       'Office_Phone',
-      ...(hasSplitAddress ? [] : ['Street']),
+      ...(hasSplitAddress ? [] : ['Street_1', 'Street_2']),
       'City',
       'State',
       'Postal_Code',
-      'Alt_Street',
+      'Alt_Street_1',
+      'Alt_Street_2',
       'Alt_City',
       'Alt_State',
       'Alt_Postal_Code',
@@ -377,14 +378,40 @@ export default function LeadsPage() {
       // Parse enriched addresses
       const enrichedAddresses = (enrichData.addresses as string[]) || []
 
+      // Helper to extract suite/apt/unit from street address
+      const extractSuite = (street: string): { street1: string; street2: string } => {
+        // Pattern to match suite/apt/unit at the end of street: "123 Main St Suite 100" or "123 Main St, Suite 100"
+        const suitePattern = /^(.+?)(?:,?\s+)((?:STE|Ste|Suite|Unit|Apt|Apartment|Bldg|Building|#)\s*[A-Za-z0-9-]+)$/i
+        const match = street.match(suitePattern)
+        if (match) {
+          return { street1: match[1].trim(), street2: match[2].trim() }
+        }
+        return { street1: street, street2: '' }
+      }
+
       // Helper to parse address string into components
       const parseAddress = (fullAddress: string) => {
         const cleaned = fullAddress.replace(/\s+/g, ' ').trim()
+
+        // Try format: "123 Main St, Suite 100, City, ST 12345" (three commas - suite separate)
+        const match3comma = cleaned.match(/^(.+?),\s*((?:STE|Ste|Suite|Unit|Apt|Apartment|Bldg|Building|#)\s*[A-Za-z0-9-]+),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
+        if (match3comma) {
+          return {
+            street1: match3comma[1].trim(),
+            street2: match3comma[2].trim(),
+            city: match3comma[3].trim(),
+            state: match3comma[4].trim().toUpperCase(),
+            postalCode: match3comma[5].trim()
+          }
+        }
+
         // Try format: "123 Main St, City, ST 12345" (two commas)
         const match = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
         if (match) {
+          const { street1, street2 } = extractSuite(match[1].trim())
           return {
-            street: match[1].trim(),
+            street1,
+            street2,
             city: match[2].trim(),
             state: match[3].trim().toUpperCase(),
             postalCode: match[4].trim()
@@ -393,8 +420,10 @@ export default function LeadsPage() {
         // Try format: "123 Main St, City, ST" (two commas, no zip)
         const match2 = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})$/i)
         if (match2) {
+          const { street1, street2 } = extractSuite(match2[1].trim())
           return {
-            street: match2[1].trim(),
+            street1,
+            street2,
             city: match2[2].trim(),
             state: match2[3].trim().toUpperCase(),
             postalCode: ''
@@ -415,15 +444,18 @@ export default function LeadsPage() {
           const suffixMatch = streetAndCity.match(streetSuffixPattern)
 
           if (suffixMatch) {
+            const { street1, street2 } = extractSuite(suffixMatch[1].trim())
             return {
-              street: suffixMatch[1].trim(),
+              street1,
+              street2,
               city: suffixMatch[2].trim(),
               state,
               postalCode
             }
           }
           // No suffix found, treat whole thing as street
-          return { street: streetAndCity, city: '', state, postalCode }
+          const { street1, street2 } = extractSuite(streetAndCity)
+          return { street1, street2, city: '', state, postalCode }
         }
         // Try format: "Street City, ST" (one comma, no zip)
         const match4 = cleaned.match(/^(.+),\s*([A-Z]{2})$/i)
@@ -435,28 +467,34 @@ export default function LeadsPage() {
           const suffixMatch = streetAndCity.match(streetSuffixPattern)
 
           if (suffixMatch) {
+            const { street1, street2 } = extractSuite(suffixMatch[1].trim())
             return {
-              street: suffixMatch[1].trim(),
+              street1,
+              street2,
               city: suffixMatch[2].trim(),
               state,
               postalCode: ''
             }
           }
-          return { street: streetAndCity, city: '', state, postalCode: '' }
+          const { street1, street2 } = extractSuite(streetAndCity)
+          return { street1, street2, city: '', state, postalCode: '' }
         }
         // Fallback: just street
-        return { street: cleaned, city: '', state: '', postalCode: '' }
+        const { street1, street2 } = extractSuite(cleaned)
+        return { street1, street2, city: '', state: '', postalCode: '' }
       }
 
       // Parse first enriched address if available
-      let enrichedStreet = ''
+      let enrichedStreet1 = ''
+      let enrichedStreet2 = ''
       let enrichedCity = ''
       let enrichedState = ''
       let enrichedPostalCode = ''
 
       if (enrichedAddresses.length > 0) {
         const parsed = parseAddress(enrichedAddresses[0])
-        enrichedStreet = parsed.street
+        enrichedStreet1 = parsed.street1
+        enrichedStreet2 = parsed.street2
         enrichedCity = parsed.city
         enrichedState = parsed.state
         enrichedPostalCode = parsed.postalCode
@@ -471,7 +509,7 @@ export default function LeadsPage() {
       }
 
       const originalParts = getStreetNumberAndFirstWord(originalStreet)
-      const enrichedParts = getStreetNumberAndFirstWord(enrichedStreet)
+      const enrichedParts = getStreetNumberAndFirstWord(enrichedStreet1)
 
       // High correlation: street number + first word match = same address
       const isHighCorrelation = originalParts && enrichedParts &&
@@ -481,28 +519,30 @@ export default function LeadsPage() {
       // Also check if normalized full address matches
       const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
       const originalNormalized = normalizeForCompare(originalStreet + originalCity + originalState)
-      const enrichedNormalized = normalizeForCompare(enrichedStreet + enrichedCity + enrichedState)
+      const enrichedNormalized = normalizeForCompare(enrichedStreet1 + enrichedCity + enrichedState)
       const exactMatch = originalNormalized === enrichedNormalized
 
       // Address is only different if not high correlation AND not exact match
-      const addressIsDifferent = enrichedStreet && originalStreet && !isHighCorrelation && !exactMatch
+      const addressIsDifferent = enrichedStreet1 && originalStreet && !isHighCorrelation && !exactMatch
 
       // Final address values: use original if present, otherwise enriched
       // Only override with enriched if original is empty
-      let street1 = originalStreet || enrichedStreet
-      const street2 = '' // We don't typically get street2 from scraping
+      let street1 = originalStreet || enrichedStreet1
+      let street2 = enrichedStreet2 // Suite/apt from enrichment
       let city = originalCity || enrichedCity
       let state = originalState || enrichedState
       let postalCode = originalPostalCode || enrichedPostalCode
 
       // Alternate address: only if enriched is truly different AND original exists
-      let altStreet = ''
+      let altStreet1 = ''
+      let altStreet2 = ''
       let altCity = ''
       let altState = ''
       let altPostalCode = ''
 
       if (addressIsDifferent) {
-        altStreet = enrichedStreet
+        altStreet1 = enrichedStreet1
+        altStreet2 = enrichedStreet2
         altCity = enrichedCity
         altState = enrichedState
         altPostalCode = enrichedPostalCode
@@ -539,16 +579,16 @@ export default function LeadsPage() {
         office_email: (enrichData.officeEmail as string) || '',
         office_phone: officePhone,
         // Address fields - support various naming conventions (street only, NOT city/state/zip in street)
-        street: combinedStreet,
+        street: street1, // For backward compat, use street1
+        street_1: street1,
+        'street 1': street1,
+        street_2: street2, // Suite/Apt/Unit
+        'street 2': street2,
         address: street1,
         address1: street1,
         'address 1': street1,
         address2: street2,
         'address 2': street2,
-        street1: street1,
-        'street 1': street1,
-        street2: street2,
-        'street 2': street2,
         city: city,
         state: formatStateAs(state, detectedStateFormat),
         postal_code: postalCode,
@@ -557,7 +597,10 @@ export default function LeadsPage() {
         zipcode: postalCode,
         'zip code': postalCode,
         // Alternate address (only populated if different from original)
-        alt_street: altStreet,
+        alt_street_1: altStreet1,
+        'alt street 1': altStreet1,
+        alt_street_2: altStreet2,
+        'alt street 2': altStreet2,
         alt_city: altCity,
         alt_state: altState ? formatStateAs(altState, detectedStateFormat) : '',
         alt_postal_code: altPostalCode,
