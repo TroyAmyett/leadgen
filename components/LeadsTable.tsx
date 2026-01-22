@@ -28,6 +28,8 @@ interface LeadsTableProps {
   onSelectAll: () => void
   onClearSelection: () => void
   allSelected: boolean
+  lastEnrichedId?: string | null
+  isEnriching?: boolean
 }
 
 export function LeadsTable({
@@ -36,6 +38,8 @@ export function LeadsTable({
   onSelectAll,
   onClearSelection,
   allSelected,
+  lastEnrichedId,
+  isEnriching,
 }: LeadsTableProps) {
   const { toggleLeadSelection } = useLeadsStore()
   const [editingLead, setEditingLead] = useState<LocalLead | null>(null)
@@ -154,12 +158,25 @@ export function LeadsTable({
             </tr>
           </thead>
           <tbody>
-            {leads.map((lead) => (
+            {leads.map((lead) => {
+              const isLastEnriched = isEnriching && lastEnrichedId === lead.id
+              return (
               <motion.tr
                 key={lead.id}
+                data-lead-id={lead.id}
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className={selectedIds.includes(lead.id) ? 'bg-fl-primary/5' : ''}
+                animate={{
+                  opacity: 1,
+                  backgroundColor: isLastEnriched
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : selectedIds.includes(lead.id)
+                      ? 'rgba(139, 92, 246, 0.05)'
+                      : 'transparent'
+                }}
+                transition={{
+                  backgroundColor: { duration: isLastEnriched ? 0.3 : 0.5 }
+                }}
+                className={`${selectedIds.includes(lead.id) ? 'bg-fl-primary/5' : ''} ${isLastEnriched ? 'ring-1 ring-fl-success/50' : ''}`}
               >
                 <td>
                   <input
@@ -318,7 +335,8 @@ export function LeadsTable({
                   </span>
                 </td>
               </motion.tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

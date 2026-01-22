@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -19,6 +19,7 @@ import { LeadFormModal } from '@/components/LeadFormModal'
 import { EnrichmentProgress } from '@/components/EnrichmentProgress'
 
 const ITEMS_PER_PAGE = 10
+const DEMO_SCROLL_VISIBLE_ROWS = 9 // Number of rows visible during demo scroll
 
 // Filter local leads
 function getFilteredLocalLeads(
@@ -88,6 +89,8 @@ export default function LeadsPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [isEnriching, setIsEnriching] = useState(false)
   const [enrichmentProgress, setEnrichmentProgress] = useState({ current: 0, total: 0 })
+  const [lastEnrichedId, setLastEnrichedId] = useState<string | null>(null)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
 
   // Get filtered leads from local store
   const filteredLeads = getFilteredLocalLeads(localLeads, searchQuery, statusFilter, enrichmentFilter)
@@ -103,6 +106,36 @@ export default function LeadsPage() {
   useEffect(() => {
     setCurrentPage(1)
   }, [searchQuery, statusFilter, enrichmentFilter])
+
+  // Scroll to show last enriched lead during enrichment
+  const scrollToLead = useCallback((leadId: string) => {
+    // Find the lead's index in the full list
+    const leadIndex = localLeads.findIndex(l => l.id === leadId)
+    if (leadIndex === -1) return
+
+    // Calculate which page this lead is on
+    const targetPage = Math.floor(leadIndex / ITEMS_PER_PAGE) + 1
+
+    // If we're enriching, jump to the page showing this lead
+    if (targetPage !== currentPage) {
+      setCurrentPage(targetPage)
+    }
+
+    // Smooth scroll the row into view after a short delay for page change
+    setTimeout(() => {
+      const row = document.querySelector(`[data-lead-id="${leadId}"]`)
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 50)
+  }, [localLeads, currentPage])
+
+  // Auto-scroll to last enriched lead during enrichment
+  useEffect(() => {
+    if (isEnriching && lastEnrichedId) {
+      scrollToLead(lastEnrichedId)
+    }
+  }, [isEnriching, lastEnrichedId, scrollToLead])
 
   // Format phone number to US format (###) ###-#### - no country code
   // Extra digits after the main number are treated as extension with comma pause
@@ -253,7 +286,7 @@ export default function LeadsPage() {
       // Helper to parse address string into components
       const parseAddress = (fullAddress: string) => {
         const cleaned = fullAddress.replace(/\s+/g, ' ').trim()
-        // Try format: "123 Main St, City, ST 12345"
+        // Try format: "123 Main St, City, ST 12345" (two commas)
         const match = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
         if (match) {
           return {
@@ -263,7 +296,7 @@ export default function LeadsPage() {
             postalCode: match[4].trim()
           }
         }
-        // Try format: "123 Main St, City, ST" (no zip)
+        // Try format: "123 Main St, City, ST" (two commas, no zip)
         const match2 = cleaned.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})$/i)
         if (match2) {
           return {
@@ -272,6 +305,50 @@ export default function LeadsPage() {
             state: match2[3].trim().toUpperCase(),
             postalCode: ''
           }
+        }
+        // Try format: "400 Lakeview Drive Coral Springs, FL 33071" (one comma before state)
+        // Pattern: Street City, ST ZIP - need to find where street ends and city begins
+        const match3 = cleaned.match(/^(.+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)$/i)
+        if (match3) {
+          const streetAndCity = match3[1].trim()
+          const state = match3[2].trim().toUpperCase()
+          const postalCode = match3[3].trim()
+
+          // Find street suffix to split street from city
+          // Includes optional suite/unit number after suffix: "123 Main St STE 100 City" or "123 Main Dr Unit 5 City"
+          // Suite patterns: STE, Suite, Unit, Apt, #, Bldg followed by alphanumeric
+          const streetSuffixPattern = /^(.+?\s+(?:St(?:reet)?|Dr(?:ive)?|Ave(?:nue)?|Blvd|Boulevard|Rd|Road|Ln|Lane|Way|Ct|Court|Pl|Place|Cir(?:cle)?|Ter(?:race)?|Hwy|Highway|Pkwy|Parkway|Trl|Trail)\.?(?:\s+(?:STE|Ste|Suite|Unit|Apt|Apartment|Bldg|Building|#)\s*[A-Za-z0-9-]+)?)\s+(.+)$/i
+          const suffixMatch = streetAndCity.match(streetSuffixPattern)
+
+          if (suffixMatch) {
+            return {
+              street: suffixMatch[1].trim(),
+              city: suffixMatch[2].trim(),
+              state,
+              postalCode
+            }
+          }
+          // No suffix found, treat whole thing as street
+          return { street: streetAndCity, city: '', state, postalCode }
+        }
+        // Try format: "Street City, ST" (one comma, no zip)
+        const match4 = cleaned.match(/^(.+),\s*([A-Z]{2})$/i)
+        if (match4) {
+          const streetAndCity = match4[1].trim()
+          const state = match4[2].trim().toUpperCase()
+
+          const streetSuffixPattern = /^(.+?\s+(?:St(?:reet)?|Dr(?:ive)?|Ave(?:nue)?|Blvd|Boulevard|Rd|Road|Ln|Lane|Way|Ct|Court|Pl|Place|Cir(?:cle)?|Ter(?:race)?|Hwy|Highway|Pkwy|Parkway|Trl|Trail)\.?(?:\s+(?:STE|Ste|Suite|Unit|Apt|Apartment|Bldg|Building|#)\s*[A-Za-z0-9-]+)?)\s+(.+)$/i
+          const suffixMatch = streetAndCity.match(streetSuffixPattern)
+
+          if (suffixMatch) {
+            return {
+              street: suffixMatch[1].trim(),
+              city: suffixMatch[2].trim(),
+              state,
+              postalCode: ''
+            }
+          }
+          return { street: streetAndCity, city: '', state, postalCode: '' }
         }
         // Fallback: just street
         return { street: cleaned, city: '', state: '', postalCode: '' }
@@ -291,11 +368,30 @@ export default function LeadsPage() {
         enrichedPostalCode = parsed.postalCode
       }
 
-      // Determine if enriched address is different from original
+      // Determine if enriched address is truly different from original
+      // Use "high correlation match": if street number and first word match, consider them the same
+      const getStreetNumberAndFirstWord = (street: string) => {
+        const normalized = street.toLowerCase().trim()
+        const match = normalized.match(/^(\d+)\s+(\w+)/)
+        return match ? { num: match[1], word: match[2] } : null
+      }
+
+      const originalParts = getStreetNumberAndFirstWord(originalStreet)
+      const enrichedParts = getStreetNumberAndFirstWord(enrichedStreet)
+
+      // High correlation: street number + first word match = same address
+      const isHighCorrelation = originalParts && enrichedParts &&
+        originalParts.num === enrichedParts.num &&
+        originalParts.word === enrichedParts.word
+
+      // Also check if normalized full address matches
       const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
       const originalNormalized = normalizeForCompare(originalStreet + originalCity + originalState)
       const enrichedNormalized = normalizeForCompare(enrichedStreet + enrichedCity + enrichedState)
-      const addressIsDifferent = enrichedNormalized && originalNormalized && enrichedNormalized !== originalNormalized
+      const exactMatch = originalNormalized === enrichedNormalized
+
+      // Address is only different if not high correlation AND not exact match
+      const addressIsDifferent = enrichedStreet && originalStreet && !isHighCorrelation && !exactMatch
 
       // Final address values: use original if present, otherwise enriched
       // Only override with enriched if original is empty
@@ -305,7 +401,7 @@ export default function LeadsPage() {
       let state = originalState || enrichedState
       let postalCode = originalPostalCode || enrichedPostalCode
 
-      // Alternate address: only if enriched is different AND original exists
+      // Alternate address: only if enriched is truly different AND original exists
       let altStreet = ''
       let altCity = ''
       let altState = ''
@@ -447,14 +543,18 @@ export default function LeadsPage() {
           phone: data.phones?.[0] || lead.phone,
           website: data.url || lead.website,
         })
+        // Track last enriched for scroll effect
+        setLastEnrichedId(lead.id)
         return { id: lead.id, success: true }
       } else {
         updateLocalLead(lead.id, { enrichment_status: 'failed' })
+        setLastEnrichedId(lead.id)
         return { id: lead.id, success: false }
       }
     } catch (err) {
       console.error('Enrichment error:', err)
       updateLocalLead(lead.id, { enrichment_status: 'failed' })
+      setLastEnrichedId(lead.id)
       return { id: lead.id, success: false }
     }
   }
@@ -686,6 +786,8 @@ export default function LeadsPage() {
           filteredLeads.length > 0 &&
           selectedLeadIds.length === filteredLeads.length
         }
+        lastEnrichedId={isEnriching ? lastEnrichedId : null}
+        isEnriching={isEnriching}
       />
 
       {/* Pagination */}

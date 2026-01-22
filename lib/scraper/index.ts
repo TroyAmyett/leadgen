@@ -283,10 +283,73 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
     })
 
     // Address extraction
+    // Full address regex: Must start with street number and include state + zip
     const addressRegex =
       /\d{1,5}\s[A-Za-z0-9,.\s-]{5,100}\s(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b[\s,.]*\d{5}/gi
     const addresses = textContent.match(addressRegex) || []
-    const cleanAddresses = addresses.map((a) => a.replace(/\s+/g, ' ').trim())
+
+    // Also look for addresses in structured elements (address tag, schema.org, common classes)
+    const structuredAddresses: string[] = []
+
+    // State abbreviations for validation
+    const stateAbbrs = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY'
+
+    // Helper to check if text is just City, ST ZIP (not a full address)
+    const isCityStateZipOnly = (text: string) => {
+      // Pattern for "City, ST 12345" without a street number at start
+      const cityStateZipPattern = new RegExp(`^[A-Za-z\\s]+,\\s*(${stateAbbrs})\\s*\\d{5}`, 'i')
+      const startsWithStreetNum = /^\d{1,5}\s/.test(text)
+      return cityStateZipPattern.test(text) && !startsWithStreetNum
+    }
+
+    // Look for <address> tags
+    $('address').each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, ' ').trim()
+      // Must have street number at start to be a full address
+      if (text.length > 10 && text.length < 200 && /^\d{1,5}\s/.test(text)) {
+        structuredAddresses.push(text)
+      }
+    })
+
+    // Look for schema.org PostalAddress - this gives us properly structured data
+    $('[itemprop="address"], [itemtype*="PostalAddress"]').each((_, el) => {
+      const streetEl = $(el).find('[itemprop="streetAddress"]')
+      const cityEl = $(el).find('[itemprop="addressLocality"]')
+      const stateEl = $(el).find('[itemprop="addressRegion"]')
+      const zipEl = $(el).find('[itemprop="postalCode"]')
+
+      const street = streetEl.text().trim()
+      const city = cityEl.text().trim()
+      const state = stateEl.text().trim()
+      const zip = zipEl.text().trim()
+
+      // Build properly formatted address: "123 Main St, City, ST 12345"
+      if (street && city && state) {
+        const parts = [street, city, state + (zip ? ' ' + zip : '')]
+        structuredAddresses.push(parts.join(', '))
+      }
+    })
+
+    // Look for common address container classes
+    $('.address, .location, .contact-address, [class*="address"], [class*="location"]').each((_, el) => {
+      const $el = $(el)
+      // Skip if it's a link or form element
+      if ($el.is('a, input, form')) return
+
+      const text = $el.text().replace(/\s+/g, ' ').trim()
+      // Must have a zip code AND start with street number to be a full address
+      // Skip if it's just "City, ST 12345"
+      if (text.match(/\b\d{5}(?:-\d{4})?\b/) && /^\d{1,5}\s/.test(text) && text.length > 15 && text.length < 200) {
+        structuredAddresses.push(text)
+      }
+    })
+
+    // Combine and dedupe addresses, filtering out city/state/zip only entries
+    const allAddresses = [...addresses, ...structuredAddresses]
+    const cleanAddresses = allAddresses
+      .map((a) => a.replace(/\s+/g, ' ').trim())
+      .filter((a) => !isCityStateZipOnly(a)) // Skip city/state/zip only
+      .filter((a, i, arr) => arr.indexOf(a) === i) // dedupe
 
     // Phone extraction
     const phones = textContent.match(PHONE_REGEX) || []
@@ -379,7 +442,7 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
       /(?:CEO|President|Owner|Founder)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
       /(?:Director|Manager|Coordinator)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
       /(?:Office\s+Manager)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
-      /(?:Contact|General\s+Manager)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+      /(?:General\s+Manager)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
     ]
 
     // Reverse patterns: "Name, Title" or "Name - Title"
@@ -417,21 +480,6 @@ export async function scrapePage(targetUrl: string): Promise<PageScrapeResult> {
         }
       }
     }
-
-    // Look for structured contact sections
-    $('*').each((_, el) => {
-      const $el = $(el)
-      const elText = $el.text().trim()
-
-      // Look for "Contact: Name" patterns
-      const contactMatch = elText.match(/Contact(?:\s+Person)?[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i)
-      if (contactMatch) {
-        const name = contactMatch[1].trim()
-        if (name && name.length > 3 && !people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-          people.push({ name, title: 'Contact' })
-        }
-      }
-    })
 
     // Look for staff/team cards (common patterns in websites)
     $('.staff, .team, .leadership, .our-team, .team-member, .staff-member, [class*="staff"], [class*="team-member"]').each((_, el) => {
