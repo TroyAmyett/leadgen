@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Upload, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, Upload, Settings, Bot } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 
 export type LeadGenTab = 'dashboard' | 'leads' | 'import' | 'settings'
@@ -17,9 +17,8 @@ const sidebarItems: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { id: 'leads', label: 'Leads', icon: Users, href: '/leads' },
   { id: 'import', label: 'Import', icon: Upload, href: '/import' },
+  { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ]
-
-const settingsItem: SidebarItem = { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' }
 
 export function LeadGenSidebar() {
   const router = useRouter()
@@ -46,47 +45,84 @@ export function LeadGenSidebar() {
   }
 
   return (
-    <div className="w-60 flex-shrink-0 flex flex-col h-full border-r border-fl-border bg-fl-bg-elevated">
+    <aside
+      style={{
+        width: '256px',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        padding: '16px',
+      }}
+    >
+      {/* App Logo/Name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', marginBottom: '24px' }}>
+        <Users style={{ width: '24px', height: '24px', color: '#0ea5e9' }} />
+        <span style={{ fontSize: '18px', fontWeight: 600, color: 'white' }}>LeadGen</span>
+      </div>
+
       {/* Navigation Items */}
-      <nav className="flex-1 py-4 px-3">
-        <div className="space-y-1">
-          {sidebarItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeTab === item.id
+      <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {sidebarItems.map((item) => {
+          const Icon = item.icon
+          const isActive = activeTab === item.id
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigation(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-fl-primary text-white'
-                    : 'text-fl-text-secondary hover:text-fl-text-primary hover:bg-fl-bg-surface'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Separator */}
-        <div className="my-4 border-t border-fl-border" />
-
-        {/* Settings */}
-        <button
-          onClick={() => handleNavigation(settingsItem.href)}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === settingsItem.id
-              ? 'bg-fl-primary text-white'
-              : 'text-fl-text-secondary hover:text-fl-text-primary hover:bg-fl-bg-surface'
-          }`}
-        >
-          <settingsItem.icon className="w-5 h-5" />
-          <span>{settingsItem.label}</span>
-        </button>
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleNavigation(item.href)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
+                border: isActive ? '1px solid rgba(14, 165, 233, 0.3)' : '1px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                background: isActive ? 'rgba(14, 165, 233, 0.2)' : 'transparent',
+                color: isActive ? '#0ea5e9' : 'rgba(255, 255, 255, 0.7)',
+              }}
+            >
+              <Icon style={{ width: '20px', height: '20px' }} />
+              <span>{item.label}</span>
+            </button>
+          )
+        })}
       </nav>
-    </div>
+
+      {/* Upsell to AgentPM */}
+      <div style={{ marginTop: 'auto', paddingTop: '24px' }}>
+        <a
+          href="https://agentpm.funnelists.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block',
+            padding: '16px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(168, 85, 247, 0.2))',
+            border: '1px solid rgba(14, 165, 233, 0.3)',
+            textDecoration: 'none',
+            transition: 'border-color 0.2s ease',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <Bot style={{ width: '20px', height: '20px', color: '#0ea5e9' }} />
+            <span style={{ fontWeight: 600, color: 'white' }}>Try AgentPM</span>
+          </div>
+          <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
+            AI planning, agentic project management and more.
+          </p>
+        </a>
+      </div>
+    </aside>
   )
 }

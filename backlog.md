@@ -149,6 +149,14 @@ Different lead types require different data sources and scraping strategies.
 - B2C: Prioritize website, Google Maps, local directories
 - Auto-detect based on company signals (funding mentions, tech stack, etc.)
 
+### Architecture Note
+> **Scraping Pipelines = Account-Level Setting**
+> Once integrated with AgentPM framework and user management, scraping pipeline selection (B2B/B2C/Custom) should be configured at the **Account level**, not per-import. This allows:
+> - Consistent enrichment approach across all imports for an account
+> - Admin control over which data sources are used
+> - Billing/usage tracking per pipeline type
+> - Custom pipeline configurations for enterprise accounts
+
 ### Free B2B Data Sources
 - **LinkedIn (public profiles)** - Limited without API
 - **Crunchbase (free tier)** - Basic company data
