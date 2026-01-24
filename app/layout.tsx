@@ -3,6 +3,7 @@ import './globals.css'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { AppHeader } from '@/components/AppHeader'
 import { LeadGenSidebar } from '@/components/LeadGenSidebar'
+import { Footer } from '@/components/Footer'
 
 export const metadata: Metadata = {
   title: 'LeadGen - Funnelists',
@@ -22,9 +23,12 @@ export default function RootLayout({
             <AppHeader />
             <div className="flex-1 flex">
               <LeadGenSidebar />
-              <main className="flex-1 overflow-auto p-6">
-                {children}
-              </main>
+              <div className="flex-1 flex flex-col">
+                <main className="flex-1 overflow-auto p-6">
+                  {children}
+                </main>
+                <Footer />
+              </div>
             </div>
           </div>
         </AuthProvider>
